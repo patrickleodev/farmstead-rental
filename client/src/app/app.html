@@ -1,0 +1,120 @@
+<ion-app>
+  <ion-content fullscreen="true">
+    <main class="shell">
+      <aside class="sidebar" aria-label="Navegacao principal">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">FR</span>
+          <div>
+            <strong>Farmstead Rental</strong>
+            <span>Gestao da chacara</span>
+          </div>
+        </div>
+
+        <nav>
+          <a class="active" href="#">Painel</a>
+          <a href="#">Reservas</a>
+          <a href="#">Calendario</a>
+          <a href="#">Financeiro</a>
+        </nav>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Hoje</p>
+            <h1>Alugueis da chacara</h1>
+          </div>
+          <button type="button">Novo aluguel</button>
+        </header>
+
+        <section class="status-band" aria-label="Estado da API">
+          @if (apiHealth(); as health) {
+            <div>
+              <span class="status-dot online" aria-hidden="true"></span>
+              <strong>{{ health.message }}</strong>
+              <p>{{ health.environment }} - {{ health.timestamp | date: 'dd/MM/yyyy HH:mm' }}</p>
+            </div>
+          } @else if (apiError()) {
+            <div>
+              <span class="status-dot offline" aria-hidden="true"></span>
+              <strong>Backend ainda nao respondeu</strong>
+              <p>{{ apiError() }}</p>
+            </div>
+          } @else {
+            <div>
+              <span class="status-dot pending" aria-hidden="true"></span>
+              <strong>Conectando ao backend</strong>
+              <p>Carregando /api/health</p>
+            </div>
+          }
+        </section>
+
+        <section class="metrics" aria-label="Resumo">
+          <article>
+            <span>Reservas do mes</span>
+            <strong>12</strong>
+            <small>4 finais de semana ocupados</small>
+          </article>
+          <article>
+            <span>Receita prevista</span>
+            <strong>{{ 18750 | currency: 'BRL' : 'symbol' : '1.0-0' }}</strong>
+            <small>Inclui sinais confirmados</small>
+          </article>
+          <article>
+            <span>Taxa de ocupacao</span>
+            <strong>68%</strong>
+            <small>Proximos 30 dias</small>
+          </article>
+        </section>
+
+        <section class="main-grid">
+          <article class="panel bookings-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Agenda</p>
+                <h2>Proximas reservas</h2>
+              </div>
+              <button class="secondary" type="button">Ver todas</button>
+            </div>
+
+            <div class="table">
+              <div class="table-row table-head">
+                <span>Cliente</span>
+                <span>Data</span>
+                <span>Status</span>
+                <span>Valor</span>
+              </div>
+
+              @for (booking of bookings; track booking.guest) {
+                <div class="table-row">
+                  <strong>{{ booking.guest }}</strong>
+                  <span>{{ booking.dates }}</span>
+                  <span class="chip">{{ booking.status }}</span>
+                  <span>{{ booking.value | currency: 'BRL' : 'symbol' : '1.0-0' }}</span>
+                </div>
+              }
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Operacao</p>
+                <h2>Pendencias</h2>
+              </div>
+            </div>
+
+            <ul class="checklist">
+              @for (item of checklist; track item) {
+                <li>
+                  <span aria-hidden="true"></span>
+                  {{ item }}
+                </li>
+              }
+            </ul>
+          </article>
+        </section>
+      </section>
+    </main>
+  </ion-content>
+</ion-app>

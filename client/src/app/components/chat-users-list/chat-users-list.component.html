@@ -1,6 +1,0 @@
-<ng-container *ngIf="privateChats">
-    <app-user-item [privateChat]="privateChat" [sub]="sub" *ngFor="let privateChat of privateChats" (clickEmitter)="getChat({ privateChat })"></app-user-item>
-</ng-container>
-<ng-container *ngIf="publicChats">
-    <app-user-item [publicChat]="publicChat" [sub]="sub" *ngFor="let publicChat of publicChats" (clickEmitter)="getChat({ publicChat })"></app-user-item>
-</ng-container>

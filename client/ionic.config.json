@@ -1,13 +1,7 @@
 {
-  "name": "farmstead-rental",
+  "name": "Farmstead Rental",
+  "type": "angular",
   "integrations": {
     "capacitor": {}
-  },
-  "type": "angular",
-  "proxies": [
-    {
-      "path": "api",
-      "proxyUrl": "http://localhost:3000"
-    }
-  ]
+  }
 }

@@ -1,22 +1,27 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import * as session from 'express-session';
-import * as passport from 'passport';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const defaultCorsOrigins = [
+    'http://localhost:4200',
+    'http://localhost:8080',
+    'capacitor://localhost',
+    'http://localhost',
+    'https://localhost',
+  ];
+  const configuredCorsOrigins = process.env.CORS_ORIGIN?.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const corsOrigins = configuredCorsOrigins?.length
+    ? configuredCorsOrigins
+    : defaultCorsOrigins;
 
-  app.enableCors();
+  app.enableCors({
+    origin: corsOrigins,
+  });
 
-  app.use(passport.initialize());
-  app.use(
-    session({
-      secret: '123456',
-      resave: false,
-      saveUninitialized: false,
-    }),
-  );
-  
-  await app.listen(3000, '0.0.0.0');
+  const port = Number(process.env.PORT ?? 3000);
+  await app.listen(port, '0.0.0.0');
 }
-bootstrap();
+void bootstrap();

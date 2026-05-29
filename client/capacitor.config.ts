@@ -1,14 +1,11 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'io.ionic.starter',
-  appName: 'farmstead-rental',
-  plugins: {
-    GoogleAuth: {
-      scopes: ['profile', 'email'],
-      serverClientId: '51626388269-kebham1in7anp70f0m2miomts3rf8ja4.apps.googleusercontent.com',
-      forceCodeForRefreshToken: true,
-    },
+  appId: 'br.com.farmsteadrental.app',
+  appName: 'Farmstead Rental',
+  webDir: 'dist/client/browser',
+  server: {
+    androidScheme: 'https',
   },
 };
 

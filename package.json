@@ -1,13 +1,27 @@
 {
   "name": "farmstead-rental",
-  "version": "1.0.0",
-  "description": "A project to contribute with my parents to management of farmstead rental",
-  "author": "Patrick",
+  "version": "0.1.0",
   "private": true,
-  "license": "MIT",
+  "description": "Full-stack app to manage farmstead rentals.",
+  "workspaces": [
+    "client",
+    "server"
+  ],
   "scripts": {
-    "docker": "docker-compose down && docker-compose up --build",
-    "db": "docker-compose down && docker-compose up db --build",
-    "server": "docker-compose down && docker-compose up db server --build"
+    "dev": "concurrently -n server,client -c green,cyan \"npm run start:dev -w server\" \"npm run start -w client\"",
+    "dev:client": "npm run start -w client",
+    "dev:server": "npm run start:dev -w server",
+    "build": "npm run build -w server && npm run build -w client",
+    "test:server": "npm run test -w server",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "mobile:sync": "npm run mobile:sync -w client",
+    "mobile:android": "npm run mobile:android -w client",
+    "mobile:ios": "npm run mobile:ios -w client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

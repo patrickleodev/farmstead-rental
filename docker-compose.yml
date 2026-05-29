@@ -1,41 +1,24 @@
 services:
-  db:
-    image: postgres
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_USER=danger
-      - POSTGRES_PASSWORD=123
-      - POSTGRES_DB=nestjs
-    container_name: DB
-    networks:
-      - app-network
-
   server:
     build:
       context: ./server
-      dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=postgresql://danger:123@db:5432/nestjs?schema=public
+      NODE_ENV: production
+      PORT: 3000
+      CORS_ORIGIN: http://localhost:4200,http://localhost:8080,capacitor://localhost,http://localhost,https://localhost
     ports:
       - "3000:3000"
-    container_name: SERVER
-    networks:
-      - app-network
-    depends_on:
-      - db
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   client:
     build:
       context: ./client
-      dockerfile: Dockerfile
-    ports:
-      - "8100:8100"
-    container_name: CLIENT
-    networks:
-      - app-network
     depends_on:
-      - server
-networks:
-  app-network:
-    driver: bridge
+      server:
+        condition: service_healthy
+    ports:
+      - "4200:80"
