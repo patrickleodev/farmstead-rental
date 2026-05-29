@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { DataSource } from 'typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -8,7 +9,15 @@ describe('AppController', () => {
   beforeEach(async () => {
     const app: TestingModule = await Test.createTestingModule({
       controllers: [AppController],
-      providers: [AppService],
+      providers: [
+        AppService,
+        {
+          provide: DataSource,
+          useValue: {
+            isInitialized: true,
+          },
+        },
+      ],
     }).compile();
 
     appController = app.get<AppController>(AppController);
@@ -19,6 +28,7 @@ describe('AppController', () => {
       expect(appController.getHealth()).toMatchObject({
         message: 'Farmstead Rental API online',
         environment: 'test',
+        database: 'connected',
       });
     });
   });
