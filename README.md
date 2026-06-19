@@ -83,6 +83,41 @@ Notas:
 - iOS so abre/compila em macOS com Xcode, mas o projeto nativo ja esta gerado em `client/ios`.
 - Antes de publicar app, use uma API HTTPS publica e revise `android:usesCleartextTraffic`.
 
+## Realtime e deploy
+
+Estado atual:
+
+- Local: frontend/app -> backend NestJS -> Postgres local no Docker.
+- Producao planejada: frontend/app -> API HTTPS publica -> Supabase Postgres.
+- Supabase entra como banco online, e pode entrar depois com Auth, Storage e Realtime. Ele nao hospeda o backend NestJS deste projeto.
+- O backend ja tem uma base Socket.IO para eventos em tempo real. O site/app mostra o status do canal e permite testar um ping realtime.
+
+Eventos Socket.IO iniciais:
+
+- `operation:state`: servidor -> clientes, com mensagem, horario e quantidade de clientes conectados.
+- `operation:ping`: cliente -> servidor, usado para testar conectividade.
+- `operation:pong`: servidor -> cliente, resposta do teste de conectividade.
+
+Proxies:
+
+- `client/proxy.conf.json` encaminha `/api` e `/socket.io` no `ng serve`.
+- `client/nginx.conf` encaminha `/api` e `/socket.io` no Docker.
+
+Deploy recomendado:
+
+1. Banco: Supabase Postgres.
+2. Backend NestJS: Render, Railway, Fly.io ou VPS, usando `server/Dockerfile`.
+3. Frontend Angular: Vercel/Netlify/Cloudflare Pages, ou junto do backend via Docker/Nginx.
+4. App Android/iOS: apontar `environment.native.ts` para a API HTTPS publica.
+
+Notas para revisar antes de publicar:
+
+- Nao versionar `.env.production` nem URLs com senha.
+- Em producao, trocar IP local por API HTTPS publica.
+- Definir `CORS_ORIGIN` com os dominios reais do frontend e do app.
+- Criar entidades, migrations e regras de negocio antes de publicar fluxo real de reservas.
+- Decidir se o realtime final sera Socket.IO no backend, Supabase Realtime, ou uma combinacao dos dois.
+
 ## Proximos passos sugeridos
 
 1. Modelar reservas, clientes, pagamentos e bloqueios de calendario.

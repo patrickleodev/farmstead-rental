@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { getNestTypeOrmOptions } from './database/typeorm.config';
+import { RealtimeGateway } from './realtime/realtime.gateway';
 
 const envFilePath = [
   process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : undefined,
@@ -22,6 +23,6 @@ const envFilePath = [
     }),
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, RealtimeGateway],
 })
 export class AppModule {}

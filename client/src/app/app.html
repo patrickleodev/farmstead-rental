@@ -27,26 +27,60 @@
           <button type="button">Novo aluguel</button>
         </header>
 
-        <section class="status-band" aria-label="Estado da API">
-          @if (apiHealth(); as health) {
+        <section class="status-grid" aria-label="Estado dos servicos">
+          <article class="status-band">
+            @if (apiHealth(); as health) {
+              <div>
+                <span class="status-dot online" aria-hidden="true"></span>
+                <strong>{{ health.message }}</strong>
+                <p>{{ health.environment }} - {{ health.timestamp | date: 'dd/MM/yyyy HH:mm' }}</p>
+              </div>
+            } @else if (apiError()) {
+              <div>
+                <span class="status-dot offline" aria-hidden="true"></span>
+                <strong>Backend ainda nao respondeu</strong>
+                <p>{{ apiError() }}</p>
+              </div>
+            } @else {
+              <div>
+                <span class="status-dot pending" aria-hidden="true"></span>
+                <strong>Conectando ao backend</strong>
+                <p>Carregando /api/health</p>
+              </div>
+            }
+          </article>
+
+          <article class="status-band realtime-band">
             <div>
-              <span class="status-dot online" aria-hidden="true"></span>
-              <strong>{{ health.message }}</strong>
-              <p>{{ health.environment }} - {{ health.timestamp | date: 'dd/MM/yyyy HH:mm' }}</p>
+              @if (realtimeStatus() === 'connected') {
+                <span class="status-dot online" aria-hidden="true"></span>
+                <strong>Tempo real conectado</strong>
+                <p>
+                  @if (realtimeState(); as state) {
+                    {{ state.message }} - {{ state.connectedClients }} cliente(s)
+                  } @else {
+                    Socket ativo {{ realtimeSocketId() }}
+                  }
+                </p>
+              } @else if (realtimeStatus() === 'disconnected') {
+                <span class="status-dot offline" aria-hidden="true"></span>
+                <strong>Tempo real desconectado</strong>
+                <p>{{ realtimeError() || 'Aguardando reconexao automatica' }}</p>
+              } @else {
+                <span class="status-dot pending" aria-hidden="true"></span>
+                <strong>Conectando tempo real</strong>
+                <p>Abrindo /socket.io</p>
+              }
             </div>
-          } @else if (apiError()) {
-            <div>
-              <span class="status-dot offline" aria-hidden="true"></span>
-              <strong>Backend ainda nao respondeu</strong>
-              <p>{{ apiError() }}</p>
-            </div>
-          } @else {
-            <div>
-              <span class="status-dot pending" aria-hidden="true"></span>
-              <strong>Conectando ao backend</strong>
-              <p>Carregando /api/health</p>
-            </div>
-          }
+
+            <button class="secondary compact" type="button" (click)="pingRealtime()">Testar sinal</button>
+
+            @if (realtimePong(); as pong) {
+              <p class="status-note">
+                {{ pong.message }} - {{ pong.receivedAt | date: 'dd/MM/yyyy HH:mm:ss' }}
+              </p>
+            }
+          </article>
         </section>
 
         <section class="metrics" aria-label="Resumo">

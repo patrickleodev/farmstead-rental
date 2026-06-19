@@ -5,7 +5,10 @@ const config: CapacitorConfig = {
   appName: 'Farmstead Rental',
   webDir: 'dist/client/browser',
   server: {
-    androidScheme: 'https',
+    androidScheme: 'http',
+  },
+  android: {
+    allowMixedContent: true,
   },
 };
 
