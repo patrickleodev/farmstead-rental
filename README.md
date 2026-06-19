@@ -44,6 +44,26 @@ npm run migration:revert -w server
 
 Por padrao, `TYPEORM_SYNC=false`; use migrations para evoluir o banco no Supabase.
 
+### Calendário de gestão
+
+O calendário é uma área interna para controlar a disponibilidade da chácara. Uma data sem
+registro é considerada **livre**; os registros podem ser **alugados** ou **bloqueados**
+(manutenção, uso próprio etc.). Ao remover um registro, suas datas voltam a ficar livres.
+Os aluguéis também guardam a situação da reserva, observações, valor total, sinal, valor já
+pago e o saldo pendente calculado automaticamente.
+
+Antes de usar a agenda pela primeira vez, aplique a migration:
+
+```bash
+npm run migration:run -w server
+```
+
+Rotas internas disponíveis:
+
+- `GET /api/calendar-entries?from=YYYY-MM-DD&to=YYYY-MM-DD`
+- `POST /api/calendar-entries`
+- `DELETE /api/calendar-entries/:id`
+
 ## Docker
 
 ```bash
@@ -97,6 +117,8 @@ Eventos Socket.IO iniciais:
 - `operation:state`: servidor -> clientes, com mensagem, horario e quantidade de clientes conectados.
 - `operation:ping`: cliente -> servidor, usado para testar conectividade.
 - `operation:pong`: servidor -> cliente, resposta do teste de conectividade.
+- `calendar:changed`: servidor -> clientes, enviado ao criar ou remover um período; as agendas conectadas recarregam automaticamente.
+- `chat:message`: servidor -> clientes, enviado quando um administrador publica uma mensagem no chat interno.
 
 Proxies:
 

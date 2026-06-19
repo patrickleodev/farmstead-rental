@@ -23,6 +23,7 @@ services:
     environment:
       DB_HOST: database
       DB_SSL: "false"
+      TYPEORM_MIGRATIONS_RUN: "true"
     depends_on:
       database:
         condition: service_healthy

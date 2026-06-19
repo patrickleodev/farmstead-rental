@@ -1,153 +1,326 @@
 <ion-app>
   <ion-content fullscreen="true">
     <main class="shell">
-      <aside class="sidebar" aria-label="Navegacao principal">
+      <aside class="sidebar" aria-label="Navegação principal">
         <div class="brand">
           <span class="brand-mark" aria-hidden="true">FR</span>
           <div>
             <strong>Farmstead Rental</strong>
-            <span>Gestao da chacara</span>
+            <span>Gestão da chácara</span>
           </div>
         </div>
 
         <nav>
-          <a class="active" href="#">Painel</a>
-          <a href="#">Reservas</a>
-          <a href="#">Calendario</a>
-          <a href="#">Financeiro</a>
+          <button type="button" [class.active]="activeView() === 'dashboard'" (click)="openView('dashboard')">Painel</button>
+          <button type="button" [class.active]="activeView() === 'calendar'" (click)="openView('calendar')">Calendário</button>
+          <button type="button" [class.active]="activeView() === 'chat'" (click)="openView('chat')">Chat</button>
         </nav>
+
+        <div class="internal-note">
+          <span aria-hidden="true">◉</span>
+          <p><strong>Área interna</strong>Somente a equipe gestora visualiza esta agenda.</p>
+        </div>
       </aside>
 
-      <section class="workspace">
-        <header class="topbar">
-          <div>
-            <p class="eyebrow">Hoje</p>
-            <h1>Alugueis da chacara</h1>
-          </div>
-          <button type="button">Novo aluguel</button>
-        </header>
-
-        <section class="status-grid" aria-label="Estado dos servicos">
-          <article class="status-band">
-            @if (apiHealth(); as health) {
-              <div>
-                <span class="status-dot online" aria-hidden="true"></span>
-                <strong>{{ health.message }}</strong>
-                <p>{{ health.environment }} - {{ health.timestamp | date: 'dd/MM/yyyy HH:mm' }}</p>
-              </div>
-            } @else if (apiError()) {
-              <div>
-                <span class="status-dot offline" aria-hidden="true"></span>
-                <strong>Backend ainda nao respondeu</strong>
-                <p>{{ apiError() }}</p>
-              </div>
-            } @else {
-              <div>
-                <span class="status-dot pending" aria-hidden="true"></span>
-                <strong>Conectando ao backend</strong>
-                <p>Carregando /api/health</p>
-              </div>
-            }
-          </article>
-
-          <article class="status-band realtime-band">
+      <section class="workspace" id="calendario">
+        @if (activeView() === 'dashboard') {
+          <header class="topbar">
             <div>
-              @if (realtimeStatus() === 'connected') {
-                <span class="status-dot online" aria-hidden="true"></span>
-                <strong>Tempo real conectado</strong>
-                <p>
-                  @if (realtimeState(); as state) {
-                    {{ state.message }} - {{ state.connectedClients }} cliente(s)
-                  } @else {
-                    Socket ativo {{ realtimeSocketId() }}
-                  }
-                </p>
-              } @else if (realtimeStatus() === 'disconnected') {
-                <span class="status-dot offline" aria-hidden="true"></span>
-                <strong>Tempo real desconectado</strong>
-                <p>{{ realtimeError() || 'Aguardando reconexao automatica' }}</p>
-              } @else {
-                <span class="status-dot pending" aria-hidden="true"></span>
-                <strong>Conectando tempo real</strong>
-                <p>Abrindo /socket.io</p>
-              }
-            </div>
-
-            <button class="secondary compact" type="button" (click)="pingRealtime()">Testar sinal</button>
-
-            @if (realtimePong(); as pong) {
-              <p class="status-note">
-                {{ pong.message }} - {{ pong.receivedAt | date: 'dd/MM/yyyy HH:mm:ss' }}
+              <p class="eyebrow">Visão geral</p>
+              <h1>Painel da chácara</h1>
+              <p class="subtitle">Acompanhe a disponibilidade e os próximos períodos da propriedade.</p>
+              <p class="realtime-status" [class.online]="realtimeConnected()">
+                <span aria-hidden="true"></span>
+                {{ realtimeConnected() ? 'Sincronização em tempo real ativa' : 'Conectando sincronização…' }}
               </p>
-            }
-          </article>
-        </section>
+            </div>
+            <button type="button" class="today-button" (click)="openView('calendar')">Abrir calendário</button>
+          </header>
 
-        <section class="metrics" aria-label="Resumo">
-          <article>
-            <span>Reservas do mes</span>
-            <strong>12</strong>
-            <small>4 finais de semana ocupados</small>
-          </article>
-          <article>
-            <span>Receita prevista</span>
-            <strong>{{ 18750 | currency: 'BRL' : 'symbol' : '1.0-0' }}</strong>
-            <small>Inclui sinais confirmados</small>
-          </article>
-          <article>
-            <span>Taxa de ocupacao</span>
-            <strong>68%</strong>
-            <small>Proximos 30 dias</small>
-          </article>
-        </section>
+          <section class="metrics" aria-label="Resumo mensal">
+            <article class="metric booked">
+              <span>Reservadas</span>
+              <strong>{{ bookedDays() }}</strong>
+              <small>dias ocupados neste mês</small>
+            </article>
+            <article class="metric free">
+              <span>Livres</span>
+              <strong>{{ freeDays() }}</strong>
+              <small>dias disponíveis para aluguel</small>
+            </article>
+            <article class="metric blocked">
+              <span>Bloqueadas</span>
+              <strong>{{ blockedDays() }}</strong>
+              <small>dias para manutenção ou uso próprio</small>
+            </article>
+          </section>
 
-        <section class="main-grid">
-          <article class="panel bookings-panel">
-            <div class="panel-heading">
+          <section class="panel dashboard-panel">
+            <div class="calendar-heading">
               <div>
                 <p class="eyebrow">Agenda</p>
-                <h2>Proximas reservas</h2>
+                <h2>Próximos períodos</h2>
               </div>
-              <button class="secondary" type="button">Ver todas</button>
+              <button type="button" class="text-button" (click)="openView('calendar')">Ver calendário</button>
             </div>
 
-            <div class="table">
-              <div class="table-row table-head">
-                <span>Cliente</span>
-                <span>Data</span>
-                <span>Status</span>
-                <span>Valor</span>
+            @if (loading()) {
+              <p class="loading">Atualizando agenda…</p>
+            } @else if (upcomingEntries().length) {
+              <div class="entry-list">
+                @for (entry of upcomingEntries(); track entry.id) {
+                  <div class="entry-row">
+                    <span [class]="entry.status"></span>
+                    <strong>{{ entry.title }}</strong>
+                    <small>{{ entry.startDate }} até {{ entry.endDate }}</small>
+                    <em>{{ entry.status === 'booked' ? getBookingStatusLabel(entry.bookingStatus) : 'Bloqueado' }}</em>
+                  </div>
+                }
               </div>
+            } @else {
+              <div class="empty-state">
+                <strong>Nenhum período cadastrado neste mês.</strong>
+                <span>O calendário está livre para novos aluguéis.</span>
+                <button type="button" class="today-button" (click)="openView('calendar')">Cadastrar período</button>
+              </div>
+            }
+          </section>
+        } @else if (activeView() === 'chat') {
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">Equipe interna</p>
+              <h1>Chat dos administradores</h1>
+              <p class="subtitle">Conversem sobre reservas, pagamentos e a operação da chácara.</p>
+            </div>
+          </header>
 
-              @for (booking of bookings; track booking.guest) {
-                <div class="table-row">
-                  <strong>{{ booking.guest }}</strong>
-                  <span>{{ booking.dates }}</span>
-                  <span class="chip">{{ booking.status }}</span>
-                  <span>{{ booking.value | currency: 'BRL' : 'symbol' : '1.0-0' }}</span>
+          <section class="panel chat-panel" aria-label="Chat dos administradores">
+            <label class="chat-author-field">
+              Você está conversando como
+              <input [(ngModel)]="chatAuthor" name="chatAuthor" maxlength="60" placeholder="Seu nome" />
+            </label>
+
+            <div class="chat-messages" aria-live="polite">
+              @if (chatLoading()) {
+                <p class="loading">Carregando mensagens…</p>
+              } @else if (!chatMessages().length) {
+                <div class="chat-empty">
+                  <strong>Comece a conversa.</strong>
+                  <span>As mensagens ficam disponíveis para todos os administradores.</span>
                 </div>
+              } @else {
+                @for (message of chatMessages(); track message.id) {
+                  <article class="chat-message" [class.own]="message.author === chatAuthor.trim()">
+                    <div class="chat-message-meta">
+                      <strong>{{ message.author }}</strong>
+                      <time>{{ message.createdAt | date: 'dd/MM · HH:mm' }}</time>
+                    </div>
+                    <p>{{ message.content }}</p>
+                  </article>
+                }
               }
             </div>
+
+            <form class="chat-compose" (ngSubmit)="sendChatMessage()">
+              <textarea [(ngModel)]="chatDraft" name="chatDraft" rows="3" maxlength="1000" placeholder="Escreva uma mensagem para a equipe…"></textarea>
+              <button type="submit" class="save-button" [disabled]="chatSending()">
+                {{ chatSending() ? 'Enviando…' : 'Enviar mensagem' }}
+              </button>
+            </form>
+
+            @if (chatError()) {
+              <p class="message error">{{ chatError() }}</p>
+            }
+          </section>
+        } @else {
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Agenda da propriedade</p>
+            <h1>Calendário de aluguéis</h1>
+            <p class="subtitle">Controle as datas livres, reservadas e bloqueadas em um só lugar.</p>
+          </div>
+          <button type="button" class="today-button" (click)="goToToday()">Hoje</button>
+        </header>
+
+        <section class="metrics" aria-label="Resumo mensal">
+          <article class="metric booked">
+            <span>Reservadas</span>
+            <strong>{{ bookedDays() }}</strong>
+            <small>dias ocupados neste mês</small>
           </article>
-
-          <article class="panel">
-            <div class="panel-heading">
-              <div>
-                <p class="eyebrow">Operacao</p>
-                <h2>Pendencias</h2>
-              </div>
-            </div>
-
-            <ul class="checklist">
-              @for (item of checklist; track item) {
-                <li>
-                  <span aria-hidden="true"></span>
-                  {{ item }}
-                </li>
-              }
-            </ul>
+          <article class="metric free">
+            <span>Livres</span>
+            <strong>{{ freeDays() }}</strong>
+            <small>dias disponíveis para aluguel</small>
+          </article>
+          <article class="metric blocked">
+            <span>Bloqueadas</span>
+            <strong>{{ blockedDays() }}</strong>
+            <small>dias para manutenção ou uso próprio</small>
           </article>
         </section>
+
+        <section class="calendar-layout">
+          <article class="panel calendar-panel">
+            <div class="calendar-heading">
+              <div>
+                <p class="eyebrow">Disponibilidade</p>
+                <h2>{{ monthLabel() }}</h2>
+              </div>
+              <div class="month-actions">
+                <button type="button" class="icon-button" aria-label="Mês anterior" (click)="previousMonth()">‹</button>
+                <button type="button" class="icon-button" aria-label="Próximo mês" (click)="nextMonth()">›</button>
+              </div>
+            </div>
+
+            <div class="legend" aria-label="Legenda">
+              <span><i class="free-dot"></i>Livre</span>
+              <span><i class="booked-dot"></i>Alugado</span>
+              <span><i class="blocked-dot"></i>Bloqueado</span>
+            </div>
+
+            @if (loading()) {
+              <p class="loading">Atualizando agenda…</p>
+            }
+
+            <div class="weekdays" aria-hidden="true">
+              <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+            </div>
+            <div class="calendar-grid">
+              @for (_ of [].constructor(leadingBlankDays()); track $index) {
+                <span class="blank-day"></span>
+              }
+              @for (day of monthDays(); track day.date) {
+                <button
+                  type="button"
+                  class="day"
+                  [class.today]="day.isToday"
+                  [class.booked-day]="day.entry?.status === 'booked'"
+                  [class.blocked-day]="day.entry?.status === 'blocked'"
+                  [class.selected]="startDate === day.date"
+                  (click)="selectDay(day)"
+                >
+                  <span>{{ day.day }}</span>
+                  @if (day.entry) {
+                    <small>{{ day.entry.title }}</small>
+                  } @else {
+                    <small>Livre</small>
+                  }
+                </button>
+              }
+            </div>
+          </article>
+
+          <aside class="panel form-panel">
+            <div>
+              <p class="eyebrow">{{ editingEntryId() ? 'Editar aluguel' : 'Novo período' }}</p>
+              <h2>{{ editingEntryId() ? 'Dados da reserva' : 'Adicionar à agenda' }}</h2>
+              <p class="form-intro">{{ editingEntryId() ? 'Atualize a reserva, situação ou financeiro e salve as alterações.' : 'Clique em uma data no calendário para definir o início.' }}</p>
+              @if (editingEntryId()) {
+                <button type="button" class="text-button new-entry-button" (click)="startNewEntry()">Adicionar novo período</button>
+              }
+            </div>
+
+            <form (ngSubmit)="saveEntry()">
+              <label>
+                Nome ou motivo
+                <input [(ngModel)]="title" name="title" placeholder="Ex.: Família Silva" maxlength="120" required />
+              </label>
+
+              <div class="date-fields">
+                <label>
+                  Entrada
+                  <input [(ngModel)]="startDate" name="startDate" type="date" required />
+                </label>
+                <label>
+                  Saída
+                  <input [(ngModel)]="endDate" name="endDate" type="date" required />
+                </label>
+              </div>
+
+              <label>
+                Tipo do período
+                <select [(ngModel)]="status" name="status">
+                  <option value="booked">Alugado</option>
+                  <option value="blocked">Bloqueado</option>
+                </select>
+              </label>
+
+              @if (status === 'booked') {
+                <label>
+                  Situação do aluguel
+                  <select [(ngModel)]="bookingStatus" name="bookingStatus">
+                    <option value="inquiry">Em negociação</option>
+                    <option value="deposit_pending">Sinal pendente</option>
+                    <option value="confirmed">Confirmada</option>
+                    <option value="completed">Concluída</option>
+                  </select>
+                </label>
+
+                <fieldset class="financial-fields">
+                  <legend>Financeiro</legend>
+                  <div class="money-fields">
+                    <label>
+                      Valor total
+                      <input [(ngModel)]="totalAmount" name="totalAmount" type="number" min="0" step="0.01" inputmode="decimal" />
+                    </label>
+                    <label>
+                      Sinal combinado
+                      <input [(ngModel)]="depositAmount" name="depositAmount" type="number" min="0" step="0.01" inputmode="decimal" />
+                    </label>
+                  </div>
+                  <label>
+                    Valor já pago
+                    <input [(ngModel)]="paidAmount" name="paidAmount" type="number" min="0" step="0.01" inputmode="decimal" />
+                  </label>
+                  <div class="payment-summary">
+                    <span>Saldo pendente</span>
+                    <strong>{{ outstandingAmount | currency: 'BRL' : 'symbol' : '1.2-2' }}</strong>
+                  </div>
+                </fieldset>
+              }
+
+              <label>
+                Observações <em>(opcional)</em>
+                <textarea [(ngModel)]="notes" name="notes" rows="3" placeholder="Ex.: sinal pago, manutenção da piscina…"></textarea>
+              </label>
+
+              <button type="submit" class="save-button" [disabled]="saving()">
+                {{ saving() ? 'Salvando…' : editingEntryId() ? 'Salvar alterações' : 'Salvar período' }}
+              </button>
+            </form>
+
+            @if (selectedEntry(); as entry) {
+              <section class="selected-entry">
+                <div>
+                  <span [class]="entry.status"></span>
+                  <div>
+                    <strong>{{ entry.title }}</strong>
+                    <small>
+                      @if (entry.status === 'booked') {
+                        Saldo {{ getEntryBalance(entry) | currency: 'BRL' : 'symbol' : '1.2-2' }} · {{ getBookingStatusLabel(entry.bookingStatus) }}
+                      } @else {
+                        {{ entry.startDate }} até {{ entry.endDate }}
+                      }
+                    </small>
+                  </div>
+                </div>
+                <div class="entry-actions">
+                  <button type="button" class="edit-button" (click)="editEntry(entry)">Editar</button>
+                  <button type="button" class="delete-button" (click)="deleteEntry(entry)">Remover</button>
+                </div>
+              </section>
+            }
+
+            @if (notice()) {
+              <p class="message success">{{ notice() }}</p>
+            }
+            @if (error()) {
+              <p class="message error">{{ error() }}</p>
+            }
+          </aside>
+        </section>
+        }
       </section>
     </main>
   </ion-content>

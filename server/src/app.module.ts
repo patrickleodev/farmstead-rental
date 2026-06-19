@@ -4,7 +4,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { getNestTypeOrmOptions } from './database/typeorm.config';
-import { RealtimeGateway } from './realtime/realtime.gateway';
+import { CalendarModule } from './calendar/calendar.module';
+import { RealtimeModule } from './realtime/realtime.module';
+import { ChatModule } from './chat/chat.module';
 
 const envFilePath = [
   process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : undefined,
@@ -21,8 +23,11 @@ const envFilePath = [
     TypeOrmModule.forRootAsync({
       useFactory: () => getNestTypeOrmOptions(),
     }),
+    RealtimeModule,
+    CalendarModule,
+    ChatModule,
   ],
   controllers: [AppController],
-  providers: [AppService, RealtimeGateway],
+  providers: [AppService],
 })
 export class AppModule {}

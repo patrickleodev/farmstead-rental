@@ -9,6 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { corsOrigin } from '../cors.config';
+import { ChatMessage } from '../chat/chat-message.entity';
 
 type OperationPingPayload = {
   source?: string;
@@ -26,6 +27,19 @@ export type OperationPong = {
   message: string;
   receivedAt: string;
   source: string;
+};
+
+export type CalendarChangedEvent = {
+  action: 'created' | 'updated' | 'removed';
+  entryId: number;
+  changedAt: string;
+};
+
+export type ChatMessageEvent = {
+  id: number;
+  author: string;
+  content: string;
+  createdAt: string;
 };
 
 @WebSocketGateway({
@@ -61,6 +75,26 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     this.broadcastState('Ping recebido do painel');
 
     return response;
+  }
+
+  notifyCalendarChanged(
+    action: CalendarChangedEvent['action'],
+    entryId: number,
+  ) {
+    this.server.emit('calendar:changed', {
+      action,
+      entryId,
+      changedAt: new Date().toISOString(),
+    } satisfies CalendarChangedEvent);
+  }
+
+  notifyChatMessage(message: ChatMessage) {
+    this.server.emit('chat:message', {
+      id: message.id,
+      author: message.author,
+      content: message.content,
+      createdAt: message.createdAt.toISOString(),
+    } satisfies ChatMessageEvent);
   }
 
   private broadcastState(message: string) {
