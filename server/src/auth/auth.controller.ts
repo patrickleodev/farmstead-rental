@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Post, UseGuards } from '@nestjs/common';
 import type { AuthenticatedUser } from './auth-user';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
@@ -13,6 +13,8 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Get('config')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+  @Header('Pragma', 'no-cache')
   getConfig() {
     return { googleClientId: this.authService.getGoogleClientId() };
   }

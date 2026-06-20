@@ -7,28 +7,19 @@
           <p class="eyebrow">Area administrativa</p>
           <h1 id="login-title">Entre para gerenciar a chacara</h1>
           <p class="subtitle">Use sua conta Google autorizada para acessar reservas, financeiro e o chat da equipe.</p>
-          <div id="google-sign-in" class="google-sign-in" aria-label="Entrar com Google"></div>
+          @if (isNativePlatform) {
+            <button type="button" class="native-google-button" [disabled]="loginLoading()" (click)="signInWithNativeGoogle()">
+              Entrar com Google
+            </button>
+          } @else {
+            <div id="google-sign-in" class="google-sign-in" aria-label="Entrar com Google"></div>
+          }
           @if (loginLoading()) {
             <p class="login-note">Preparando login seguro...</p>
           }
           @if (loginError()) {
             <p class="message error">{{ loginError() }}</p>
             <button type="button" class="text-button" (click)="retryGoogleLogin()">Tentar novamente</button>
-        @if (authUser(); as user) {
-          <div class="user-card">
-            @if (user.avatarUrl) {
-              <img [src]="user.avatarUrl" [alt]="user.name" />
-            } @else {
-              <span class="user-avatar">{{ user.name.charAt(0) }}</span>
-            }
-            <div>
-              <strong>{{ user.name }}</strong>
-              <span>{{ user.email }}</span>
-            </div>
-            <button type="button" class="logout-button" (click)="logout()">Sair</button>
-          </div>
-        }
-
           }
         </section>
       </main>

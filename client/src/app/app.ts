@@ -2,6 +2,8 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Component, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Capacitor } from '@capacitor/core';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 import { IonApp, IonContent } from '@ionic/angular/standalone';
 import { Socket, io } from 'socket.io-client';
 
@@ -115,8 +117,10 @@ export class App implements OnDestroy {
   private readonly accessTokenKey = 'farmstead-rental.access-token';
   private workspaceStarted = false;
   private realtimeBound = false;
+  private nativeGoogleInitialized = false;
 
   protected readonly currentPath = signal(this.getCurrentPath());
+  protected readonly isNativePlatform = Capacitor.isNativePlatform();
   protected readonly month = signal(this.firstDayOfMonth(new Date()));
   protected readonly activeView = signal<ManagementView>('dashboard');
   protected readonly entries = signal<CalendarEntry[]>([]);
@@ -270,6 +274,40 @@ export class App implements OnDestroy {
   protected retryGoogleLogin() {
     this.loginError.set('');
     this.loadGoogleConfiguration();
+  }
+
+  protected async signInWithNativeGoogle() {
+    const clientId = this.googleClientId();
+    if (!clientId) {
+      this.loadGoogleConfiguration();
+      return;
+    }
+
+    this.loginError.set('');
+    this.loginLoading.set(true);
+
+    try {
+      await this.initializeNativeGoogleLogin(clientId);
+      const login = await SocialLogin.login({
+        provider: 'google',
+        options: {},
+      });
+      const idToken = 'idToken' in login.result ? login.result.idToken : null;
+
+      if (!idToken) {
+        throw new Error('O Google não retornou um token de identificação.');
+      }
+
+      this.zone.run(() => this.signInWithGoogle(idToken));
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      this.zone.run(() => {
+        this.loginLoading.set(false);
+        if (code !== 'USER_CANCELLED') {
+          this.loginError.set('Não foi possível iniciar o login Google no Android.');
+        }
+      });
+    }
   }
 
   protected selectDay(day: CalendarDay) {
@@ -440,14 +478,27 @@ export class App implements OnDestroy {
     }
 
     this.loginLoading.set(true);
-    this.http.get<{ googleClientId: string }>(`${this.apiUrl}/auth/config`).subscribe({
+    const configUrl = `${this.apiUrl}/auth/config?refresh=${Date.now()}`;
+    this.http.get<{ googleClientId: string }>(configUrl).subscribe({
       next: ({ googleClientId }) => {
-        this.loginLoading.set(false);
         if (!googleClientId) {
+          this.loginLoading.set(false);
           this.loginError.set('O login Google ainda não foi configurado no servidor.');
           return;
         }
         this.googleClientId.set(googleClientId);
+        if (this.isNativePlatform) {
+          this.initializeNativeGoogleLogin(googleClientId)
+            .then(() => this.zone.run(() => this.loginLoading.set(false)))
+            .catch(() =>
+              this.zone.run(() => {
+                this.loginLoading.set(false);
+                this.loginError.set('Não foi possível preparar o login Google no Android.');
+              }),
+            );
+          return;
+        }
+        this.loginLoading.set(false);
         this.loadGoogleScript();
       },
       error: () => {
@@ -455,6 +506,20 @@ export class App implements OnDestroy {
         this.loginError.set('Não foi possível carregar a configuração de login.');
       },
     });
+  }
+
+  private async initializeNativeGoogleLogin(clientId: string) {
+    if (this.nativeGoogleInitialized) {
+      return;
+    }
+
+    await SocialLogin.initialize({
+      google: {
+        webClientId: clientId,
+        mode: 'online',
+      },
+    });
+    this.nativeGoogleInitialized = true;
   }
 
   private loadGoogleScript() {
