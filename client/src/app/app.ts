@@ -11,6 +11,26 @@ type CalendarEntryStatus = 'booked' | 'blocked';
 type BookingStatus = 'inquiry' | 'deposit_pending' | 'confirmed' | 'completed';
 type ManagementView = 'dashboard' | 'calendar' | 'chat';
 
+type AuthUser = {
+  id: number;
+  email: string;
+  name: string;
+  avatarUrl: string | null;
+};
+
+type GoogleLoginResponse = {
+  token: string;
+  user: AuthUser;
+};
+
+type AuditLog = {
+  id: number;
+  actorName: string;
+  action: string;
+  summary: string;
+  createdAt: string;
+};
+
 type CalendarEntry = {
   id: number;
   title: string;
@@ -49,6 +69,25 @@ type ServerToClientEvents = {
   'chat:message': (message: ChatMessage) => void;
 };
 
+type GoogleCredentialResponse = {
+  credential: string;
+};
+
+type GoogleIdentity = {
+  accounts: {
+    id: {
+      initialize: (options: {
+        client_id: string;
+        callback: (response: GoogleCredentialResponse) => void;
+      }) => void;
+      renderButton: (
+        parent: HTMLElement,
+        options: { theme: string; size: string; text: string; width: number },
+      ) => void;
+    };
+  };
+};
+
 const formatDate = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -73,7 +112,11 @@ export class App implements OnDestroy {
   private readonly zone = inject(NgZone);
   private readonly apiUrl = environment.apiUrl;
   private readonly socket = this.createRealtimeSocket();
+  private readonly accessTokenKey = 'farmstead-rental.access-token';
+  private workspaceStarted = false;
+  private realtimeBound = false;
 
+  protected readonly currentPath = signal(this.getCurrentPath());
   protected readonly month = signal(this.firstDayOfMonth(new Date()));
   protected readonly activeView = signal<ManagementView>('dashboard');
   protected readonly entries = signal<CalendarEntry[]>([]);
@@ -87,6 +130,13 @@ export class App implements OnDestroy {
   protected readonly chatLoading = signal(false);
   protected readonly chatSending = signal(false);
   protected readonly chatError = signal('');
+  protected readonly authUser = signal<AuthUser | null>(null);
+  protected readonly authLoading = signal(true);
+  protected readonly loginLoading = signal(false);
+  protected readonly loginError = signal('');
+  protected readonly googleClientId = signal('');
+  protected readonly auditLogs = signal<AuditLog[]>([]);
+  protected readonly auditLoading = signal(false);
   private readonly selectedDate = signal(formatDate(new Date()));
 
   protected title = '';
@@ -105,7 +155,6 @@ export class App implements OnDestroy {
   protected totalAmount = 0;
   protected depositAmount = 0;
   protected paidAmount = 0;
-  protected chatAuthor = this.getSavedChatAuthor();
   protected chatDraft = '';
 
   protected readonly monthLabel = computed(() =>
@@ -148,9 +197,9 @@ export class App implements OnDestroy {
   });
 
   constructor() {
-    this.loadEntries();
-    this.loadChatMessages();
-    this.connectRealtime();
+    window.addEventListener('popstate', () => this.zone.run(() => this.handleLocation()));
+    this.handleLocation();
+    this.restoreSession();
   }
 
   ngOnDestroy() {
@@ -162,31 +211,27 @@ export class App implements OnDestroy {
   }
 
   protected openView(view: ManagementView) {
-    this.activeView.set(view);
-    if (view === 'chat') {
-      this.loadChatMessages();
-    }
+    const paths: Record<ManagementView, string> = {
+      dashboard: '/',
+      calendar: '/calendario',
+      chat: '/chat',
+    };
+    this.navigate(paths[view]);
   }
 
   protected sendChatMessage() {
-    const author = this.chatAuthor.trim();
     const content = this.chatDraft.trim();
     this.chatError.set('');
 
-    if (!author || !content) {
-      this.chatError.set('Informe seu nome e escreva uma mensagem.');
+    if (!content) {
+      this.chatError.set('Escreva uma mensagem antes de enviar.');
       return;
     }
 
     this.chatSending.set(true);
-    try {
-      localStorage.setItem('farmstead-rental.chat-author', author);
-    } catch {
-      // The chat remains usable when local storage is unavailable.
-    }
 
     this.http
-      .post<ChatMessage>(`${this.apiUrl}/chat-messages`, { author, content })
+      .post<ChatMessage>(`${this.apiUrl}/chat-messages`, { content })
       .subscribe({
         next: (message) => {
           this.chatSending.set(false);
@@ -209,6 +254,22 @@ export class App implements OnDestroy {
     this.startDate = formatDate(new Date());
     this.endDate = this.startDate;
     this.loadEntries();
+  }
+
+  protected logout() {
+    localStorage.removeItem(this.accessTokenKey);
+    this.socket.disconnect();
+    this.workspaceStarted = false;
+    this.authUser.set(null);
+    this.entries.set([]);
+    this.chatMessages.set([]);
+    this.auditLogs.set([]);
+    this.navigate('/login', true);
+  }
+
+  protected retryGoogleLogin() {
+    this.loginError.set('');
+    this.loadGoogleConfiguration();
   }
 
   protected selectDay(day: CalendarDay) {
@@ -294,6 +355,165 @@ export class App implements OnDestroy {
     });
   }
 
+  private restoreSession() {
+    if (!this.getAccessToken()) {
+      this.authLoading.set(false);
+      if (this.currentPath() !== '/login') {
+        this.navigate('/login', true);
+      } else {
+        this.loadGoogleConfiguration();
+      }
+      return;
+    }
+
+    this.http.get<AuthUser>(`${this.apiUrl}/auth/me`).subscribe({
+      next: (user) => {
+        this.authUser.set(user);
+        this.authLoading.set(false);
+        if (this.currentPath() === '/login') {
+          this.navigate('/', true);
+        }
+        this.startWorkspace();
+      },
+      error: () => {
+        localStorage.removeItem(this.accessTokenKey);
+        this.authLoading.set(false);
+        this.navigate('/login', true);
+        this.loadGoogleConfiguration();
+      },
+    });
+  }
+
+  private handleLocation() {
+    const path = this.getCurrentPath();
+    const validPaths = ['/', '/login', '/calendario', '/chat'];
+    if (!validPaths.includes(path)) {
+      this.navigate('/', true);
+      return;
+    }
+
+    this.currentPath.set(path);
+    if (path === '/login') {
+      if (!this.authUser()) {
+        this.loadGoogleConfiguration();
+      }
+      return;
+    }
+
+    const views: Record<string, ManagementView> = {
+      '/': 'dashboard',
+      '/calendario': 'calendar',
+      '/chat': 'chat',
+    };
+    this.activeView.set(views[path]);
+    if (!this.authLoading() && !this.authUser()) {
+      this.navigate('/login', true);
+      return;
+    }
+    if (path === '/chat' && this.workspaceStarted) {
+      this.loadChatMessages();
+    }
+  }
+
+  private navigate(path: string, replace = false) {
+    if (window.location.pathname !== path) {
+      const method = replace ? 'replaceState' : 'pushState';
+      window.history[method](null, '', path);
+    }
+    this.handleLocation();
+  }
+
+  private startWorkspace() {
+    if (this.workspaceStarted) {
+      return;
+    }
+    this.workspaceStarted = true;
+    this.loadEntries();
+    this.loadChatMessages();
+    this.loadAuditLogs();
+    this.connectRealtime();
+  }
+
+  private loadGoogleConfiguration() {
+    if (this.googleClientId() || this.loginLoading()) {
+      return;
+    }
+
+    this.loginLoading.set(true);
+    this.http.get<{ googleClientId: string }>(`${this.apiUrl}/auth/config`).subscribe({
+      next: ({ googleClientId }) => {
+        this.loginLoading.set(false);
+        if (!googleClientId) {
+          this.loginError.set('O login Google ainda não foi configurado no servidor.');
+          return;
+        }
+        this.googleClientId.set(googleClientId);
+        this.loadGoogleScript();
+      },
+      error: () => {
+        this.loginLoading.set(false);
+        this.loginError.set('Não foi possível carregar a configuração de login.');
+      },
+    });
+  }
+
+  private loadGoogleScript() {
+    const existingScript = document.getElementById('google-identity-services');
+    if (existingScript) {
+      this.renderGoogleButton();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'google-identity-services';
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.onload = () => this.zone.run(() => this.renderGoogleButton());
+    script.onerror = () =>
+      this.zone.run(() => this.loginError.set('Não foi possível carregar o login Google.'));
+    document.head.append(script);
+  }
+
+  private renderGoogleButton() {
+    const clientId = this.googleClientId();
+    const target = document.getElementById('google-sign-in');
+    const google = (window as unknown as { google?: GoogleIdentity }).google;
+    if (!clientId || !target || !google) {
+      return;
+    }
+
+    target.replaceChildren();
+    google.accounts.id.initialize({
+      client_id: clientId,
+      callback: (response) => this.zone.run(() => this.signInWithGoogle(response.credential)),
+    });
+    google.accounts.id.renderButton(target, {
+      theme: 'outline',
+      size: 'large',
+      text: 'signin_with',
+      width: 320,
+    });
+  }
+
+  private signInWithGoogle(credential: string) {
+    this.loginError.set('');
+    this.loginLoading.set(true);
+    this.http.post<GoogleLoginResponse>(`${this.apiUrl}/auth/google`, { credential }).subscribe({
+      next: ({ token, user }) => {
+        localStorage.setItem(this.accessTokenKey, token);
+        this.authUser.set(user);
+        this.loginLoading.set(false);
+        this.authLoading.set(false);
+        this.navigate('/', true);
+        this.startWorkspace();
+      },
+      error: (error: HttpErrorResponse) => {
+        this.loginLoading.set(false);
+        this.loginError.set(this.getLoginErrorMessage(error));
+      },
+    });
+  }
+
   private changeMonth(offset: number) {
     const current = this.month();
     this.month.set(new Date(current.getFullYear(), current.getMonth() + offset, 1));
@@ -363,7 +583,26 @@ export class App implements OnDestroy {
     });
   }
 
+  private loadAuditLogs() {
+    this.auditLoading.set(true);
+    this.http.get<AuditLog[]>(`${this.apiUrl}/audit-logs`).subscribe({
+      next: (logs) => {
+        this.auditLogs.set(logs);
+        this.auditLoading.set(false);
+      },
+      error: () => this.auditLoading.set(false),
+    });
+  }
+
   private connectRealtime() {
+    if (!this.getAccessToken()) {
+      return;
+    }
+    if (this.realtimeBound) {
+      this.socket.connect();
+      return;
+    }
+    this.realtimeBound = true;
     this.socket.on('connect', () => {
       this.zone.run(() => this.realtimeConnected.set(true));
     });
@@ -375,6 +614,7 @@ export class App implements OnDestroy {
     this.socket.on('calendar:changed', () => {
       this.zone.run(() => {
         this.loadEntries();
+        this.loadAuditLogs();
         this.notice.set('Agenda atualizada por outro dispositivo.');
       });
     });
@@ -391,6 +631,8 @@ export class App implements OnDestroy {
     const options = {
       autoConnect: false,
       transports: ['websocket', 'polling'],
+      auth: (callback: (data: { token: string }) => void) =>
+        callback({ token: this.getAccessToken() }),
     };
     const socket = realtimeUrl ? io(realtimeUrl, options) : io(options);
     return socket as Socket<ServerToClientEvents>;
@@ -408,6 +650,15 @@ export class App implements OnDestroy {
     return new Date(date.getFullYear(), date.getMonth(), 1);
   }
 
+  private getCurrentPath() {
+    const path = window.location.pathname.replace(/\/+$/, '') || '/';
+    return path === '/index.html' ? '/' : path;
+  }
+
+  private getAccessToken() {
+    return localStorage.getItem(this.accessTokenKey) ?? '';
+  }
+
   private addChatMessage(message: ChatMessage) {
     this.chatMessages.update((messages) => {
       if (messages.some((item) => item.id === message.id)) {
@@ -415,14 +666,6 @@ export class App implements OnDestroy {
       }
       return [...messages, message].slice(-100);
     });
-  }
-
-  private getSavedChatAuthor() {
-    try {
-      return localStorage.getItem('farmstead-rental.chat-author') ?? '';
-    } catch {
-      return '';
-    }
   }
 
   private getErrorMessage(error: HttpErrorResponse) {
@@ -442,5 +685,13 @@ export class App implements OnDestroy {
       return apiMessage;
     }
     return 'Não foi possível atualizar o chat. Verifique se a API está em execução.';
+  }
+
+  private getLoginErrorMessage(error: HttpErrorResponse) {
+    const apiMessage = error.error?.message;
+    if (typeof apiMessage === 'string') {
+      return apiMessage;
+    }
+    return 'Não foi possível concluir o login com Google.';
   }
 }

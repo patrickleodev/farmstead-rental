@@ -100,6 +100,22 @@ Notas:
 
 - Android foi configurado para desenvolvimento local usando `http://10.0.2.2:3000/api`, que aponta do emulador Android para o host.
 - Em aparelho fisico, troque `client/src/environments/environment.native.ts` para o IP da sua maquina na rede, por exemplo `http://192.168.0.10:3000/api`.
+
+## Google authentication and routes
+
+The management area requires an authorized Google account. Configure these values in `server/.env` before starting the API:
+
+- `GOOGLE_CLIENT_ID`: OAuth 2.0 Web client ID created in Google Cloud.
+- `AUTH_JWT_SECRET`: random secret with at least 32 characters.
+- `ADMIN_EMAILS`: comma-separated list of Google accounts allowed to manage the property.
+
+In Google Cloud, add the web origin used by the app, such as `http://localhost:4200`, to the OAuth client configuration.
+
+Internal application routes:
+
+- `/login`: Google sign-in.
+- `/`: dashboard and audit history.
+- `/calendario`: rental calendar.
 - iOS so abre/compila em macOS com Xcode, mas o projeto nativo ja esta gerado em `client/ios`.
 - Antes de publicar app, use uma API HTTPS publica e revise `android:usesCleartextTraffic`.
 

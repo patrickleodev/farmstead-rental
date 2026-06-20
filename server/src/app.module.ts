@@ -7,6 +7,8 @@ import { getNestTypeOrmOptions } from './database/typeorm.config';
 import { CalendarModule } from './calendar/calendar.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { ChatModule } from './chat/chat.module';
+import { AuthModule } from './auth/auth.module';
+import { AuditModule } from './audit/audit.module';
 
 const envFilePath = [
   process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : undefined,
@@ -23,7 +25,9 @@ const envFilePath = [
     TypeOrmModule.forRootAsync({
       useFactory: () => getNestTypeOrmOptions(),
     }),
+    AuthModule,
     RealtimeModule,
+    AuditModule,
     CalendarModule,
     ChatModule,
   ],

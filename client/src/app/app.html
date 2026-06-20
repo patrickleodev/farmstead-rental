@@ -1,5 +1,40 @@
 <ion-app>
   <ion-content fullscreen="true">
+    @if (currentPath() === '/login') {
+      <main class="login-shell">
+        <section class="login-card" aria-labelledby="login-title">
+          <span class="brand-mark" aria-hidden="true">FR</span>
+          <p class="eyebrow">Area administrativa</p>
+          <h1 id="login-title">Entre para gerenciar a chacara</h1>
+          <p class="subtitle">Use sua conta Google autorizada para acessar reservas, financeiro e o chat da equipe.</p>
+          <div id="google-sign-in" class="google-sign-in" aria-label="Entrar com Google"></div>
+          @if (loginLoading()) {
+            <p class="login-note">Preparando login seguro...</p>
+          }
+          @if (loginError()) {
+            <p class="message error">{{ loginError() }}</p>
+            <button type="button" class="text-button" (click)="retryGoogleLogin()">Tentar novamente</button>
+        @if (authUser(); as user) {
+          <div class="user-card">
+            @if (user.avatarUrl) {
+              <img [src]="user.avatarUrl" [alt]="user.name" />
+            } @else {
+              <span class="user-avatar">{{ user.name.charAt(0) }}</span>
+            }
+            <div>
+              <strong>{{ user.name }}</strong>
+              <span>{{ user.email }}</span>
+            </div>
+            <button type="button" class="logout-button" (click)="logout()">Sair</button>
+          </div>
+        }
+
+          }
+        </section>
+      </main>
+    } @else if (authLoading()) {
+      <main class="login-shell"><p class="login-note">Verificando sua sessao...</p></main>
+    } @else {
     <main class="shell">
       <aside class="sidebar" aria-label="Navegação principal">
         <div class="brand">
@@ -86,6 +121,32 @@
             }
           </section>
         } @else if (activeView() === 'chat') {
+          <section class="panel audit-panel">
+            <div class="calendar-heading">
+              <div>
+                <p class="eyebrow">Historico</p>
+                <h2>Ultimas alteracoes</h2>
+              </div>
+            </div>
+            @if (auditLoading()) {
+              <p class="loading">Carregando historico...</p>
+            } @else if (auditLogs().length) {
+              <div class="audit-list">
+                @for (log of auditLogs(); track log.id) {
+                  <article>
+                    <span aria-hidden="true">*</span>
+                    <div>
+                      <strong>{{ log.actorName }}</strong>
+                      <p>{{ log.summary }}</p>
+                    </div>
+                    <time>{{ log.createdAt | date: 'dd/MM HH:mm' }}</time>
+                  </article>
+                }
+              </div>
+            } @else {
+              <p class="loading">As alteracoes feitas pela equipe aparecerao aqui.</p>
+            }
+          </section>
           <header class="topbar">
             <div>
               <p class="eyebrow">Equipe interna</p>
@@ -97,7 +158,7 @@
           <section class="panel chat-panel" aria-label="Chat dos administradores">
             <label class="chat-author-field">
               Você está conversando como
-              <input [(ngModel)]="chatAuthor" name="chatAuthor" maxlength="60" placeholder="Seu nome" />
+              <input [value]="authUser()?.name ?? ''" name="chatAuthor" readonly />
             </label>
 
             <div class="chat-messages" aria-live="polite">
@@ -110,7 +171,7 @@
                 </div>
               } @else {
                 @for (message of chatMessages(); track message.id) {
-                  <article class="chat-message" [class.own]="message.author === chatAuthor.trim()">
+                  <article class="chat-message" [class.own]="message.author === authUser()?.name">
                     <div class="chat-message-meta">
                       <strong>{{ message.author }}</strong>
                       <time>{{ message.createdAt | date: 'dd/MM · HH:mm' }}</time>
@@ -323,5 +384,6 @@
         }
       </section>
     </main>
+    }
   </ion-content>
 </ion-app>

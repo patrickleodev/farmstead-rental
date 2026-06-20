@@ -8,9 +8,15 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
-import { CalendarEntryStatus } from './calendar-entry.entity';
-import { BookingStatus } from './calendar-entry.entity';
+import { AuthGuard } from '../auth/auth.guard';
+import type { AuthenticatedUser } from '../auth/auth-user';
+import { CurrentUser } from '../auth/current-user.decorator';
+import {
+  BookingStatus,
+  CalendarEntryStatus,
+} from './calendar-entry.entity';
 import { CalendarService } from './calendar.service';
 
 type CreateCalendarEntryBody = {
@@ -26,6 +32,7 @@ type CreateCalendarEntryBody = {
 };
 
 @Controller('api/calendar-entries')
+@UseGuards(AuthGuard)
 export class CalendarController {
   constructor(private readonly calendarService: CalendarService) {}
 
@@ -35,17 +42,24 @@ export class CalendarController {
   }
 
   @Post()
-  create(@Body() body: CreateCalendarEntryBody) {
-    return this.calendarService.create(body);
+  create(
+    @Body() body: CreateCalendarEntryBody,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.calendarService.create(body, user);
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() body: CreateCalendarEntryBody) {
-    return this.calendarService.update(id, body);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: CreateCalendarEntryBody,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.calendarService.update(id, body, user);
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.calendarService.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthenticatedUser) {
+    return this.calendarService.remove(id, user);
   }
 }

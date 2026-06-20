@@ -13,6 +13,8 @@ import {
   calendarEntryStatuses,
 } from './calendar-entry.entity';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { AuditService } from '../audit/audit.service';
+import type { AuthenticatedUser } from '../auth/auth-user';
 
 export type CreateCalendarEntry = {
   title: string;
@@ -32,6 +34,7 @@ export class CalendarService {
     @InjectRepository(CalendarEntry)
     private readonly calendarEntries: Repository<CalendarEntry>,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly auditService: AuditService,
   ) {}
 
   async findAll(from?: string, to?: string) {
@@ -51,25 +54,42 @@ export class CalendarService {
     });
   }
 
-  async create(payload: CreateCalendarEntry) {
+  async create(payload: CreateCalendarEntry, actor: AuthenticatedUser) {
     const entry = this.normalizePayload(payload);
     await this.ensureNoOverlap(entry.startDate, entry.endDate);
     const savedEntry = await this.calendarEntries.save(
       this.calendarEntries.create(entry),
     );
+    await this.auditService.record(actor, {
+      action: 'calendar.created',
+      entityType: 'calendar_entry',
+      entityId: savedEntry.id,
+      summary: `Created booking ${savedEntry.title}.`,
+    });
     this.realtimeGateway.notifyCalendarChanged('created', savedEntry.id);
     return savedEntry;
   }
 
-  async remove(id: number) {
-    const result = await this.calendarEntries.delete(id);
-    if (!result.affected) {
+  async remove(id: number, actor: AuthenticatedUser) {
+    const existingEntry = await this.calendarEntries.findOneBy({ id });
+    if (!existingEntry) {
       throw new NotFoundException('Período não encontrado.');
     }
+    await this.calendarEntries.delete(id);
+    await this.auditService.record(actor, {
+      action: 'calendar.removed',
+      entityType: 'calendar_entry',
+      entityId: id,
+      summary: `Removed booking ${existingEntry.title}.`,
+    });
     this.realtimeGateway.notifyCalendarChanged('removed', id);
   }
 
-  async update(id: number, payload: CreateCalendarEntry) {
+  async update(
+    id: number,
+    payload: CreateCalendarEntry,
+    actor: AuthenticatedUser,
+  ) {
     const existingEntry = await this.calendarEntries.findOneBy({ id });
     if (!existingEntry) {
       throw new NotFoundException('Período não encontrado.');
@@ -78,6 +98,12 @@ export class CalendarService {
     const entry = this.normalizePayload(payload);
     await this.ensureNoOverlap(entry.startDate, entry.endDate, id);
     const savedEntry = await this.calendarEntries.save({ ...existingEntry, ...entry });
+    await this.auditService.record(actor, {
+      action: 'calendar.updated',
+      entityType: 'calendar_entry',
+      entityId: id,
+      summary: `Updated booking ${savedEntry.title}.`,
+    });
     this.realtimeGateway.notifyCalendarChanged('updated', id);
     return savedEntry;
   }

@@ -2,6 +2,8 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { AuditService } from '../audit/audit.service';
+import type { AuthenticatedUser } from '../auth/auth-user';
 import { ChatMessage } from './chat-message.entity';
 
 export type CreateChatMessage = {
@@ -15,6 +17,7 @@ export class ChatService {
     @InjectRepository(ChatMessage)
     private readonly messages: Repository<ChatMessage>,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly auditService: AuditService,
   ) {}
 
   async findRecent() {
@@ -25,8 +28,8 @@ export class ChatService {
     return messages.reverse();
   }
 
-  async create(payload: CreateChatMessage) {
-    const author = payload.author?.trim();
+  async create(payload: CreateChatMessage, actor: AuthenticatedUser) {
+    const author = actor.name;
     const content = payload.content?.trim();
 
     if (!author || author.length > 60) {
@@ -39,6 +42,12 @@ export class ChatService {
     const message = await this.messages.save(
       this.messages.create({ author, content }),
     );
+    await this.auditService.record(actor, {
+      action: 'chat.message_created',
+      entityType: 'chat_message',
+      entityId: message.id,
+      summary: 'Sent a message in the admin chat.',
+    });
     this.realtimeGateway.notifyChatMessage(message);
     return message;
   }

@@ -10,6 +10,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { corsOrigin } from '../cors.config';
 import { ChatMessage } from '../chat/chat-message.entity';
+import { AuthService } from '../auth/auth.service';
 
 type OperationPingPayload = {
   source?: string;
@@ -51,7 +52,19 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   @WebSocketServer()
   private server!: Server;
 
-  handleConnection() {
+  constructor(private readonly authService: AuthService) {}
+
+  handleConnection(client: Socket) {
+    try {
+      const token = client.handshake.auth.token;
+      if (typeof token !== 'string') {
+        throw new Error('Missing token');
+      }
+      this.authService.verifyAccessToken(token);
+    } catch {
+      client.disconnect(true);
+      return;
+    }
     this.broadcastState('Cliente conectado ao painel em tempo real');
   }
 
