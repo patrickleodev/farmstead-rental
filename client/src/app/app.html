@@ -262,7 +262,9 @@
                   [class.entry-middle]="day.entryMiddle"
                   [class.entry-end]="day.entryEnd"
                   [class.entry-single]="day.entrySingle"
-                  [class.entry-active]="selectedEntry()?.id === day.entry?.id"
+                  [class.entry-week-start]="!!day.entry && day.weekday === 0"
+                  [class.entry-week-end]="!!day.entry && day.weekday === 6"
+                  [class.entry-active]="!!day.entry && selectedEntry()?.id === day.entry.id"
                   [class.selected]="startDate === day.date"
                   (click)="selectDay(day)"
                 >
