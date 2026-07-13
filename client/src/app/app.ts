@@ -50,14 +50,31 @@ type CalendarEntry = {
 type CalendarDay = {
   date: string;
   day: number;
+  weekday: number;
   isToday: boolean;
   entry?: CalendarEntry;
+  entryStart?: boolean;
+  entryMiddle?: boolean;
+  entryEnd?: boolean;
+  entrySingle?: boolean;
 };
 
 type CalendarChangedEvent = {
   action: 'created' | 'updated' | 'removed';
   entryId: number;
   changedAt: string;
+};
+
+type MockCalendarEntrySeed = {
+  title: string;
+  startOffset: number;
+  endOffset: number;
+  status: CalendarEntryStatus;
+  bookingStatus?: BookingStatus;
+  notes?: string | null;
+  totalAmount?: number;
+  depositAmount?: number;
+  paidAmount?: number;
 };
 
 type ChatMessage = {
@@ -102,6 +119,70 @@ const addDays = (date: Date, days: number) => {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
+};
+
+const buildMockCalendarEntries = (month: Date): CalendarEntry[] => {
+  const baseDate = new Date(month.getFullYear(), month.getMonth(), 1);
+  const seeds: MockCalendarEntrySeed[] = [
+    {
+      title: 'Família Silva',
+      startOffset: 2,
+      endOffset: 6,
+      status: 'booked',
+      bookingStatus: 'confirmed',
+      notes: 'Estadia de final de semana longa.',
+      totalAmount: 2850,
+      depositAmount: 850,
+      paidAmount: 850,
+    },
+    {
+      title: 'Bloqueio piscina',
+      startOffset: 11,
+      endOffset: 13,
+      status: 'blocked',
+      notes: 'Manutenção e limpeza da área externa.',
+    },
+    {
+      title: 'Casal Martins',
+      startOffset: 17,
+      endOffset: 19,
+      status: 'booked',
+      bookingStatus: 'deposit_pending',
+      notes: 'Aguardando confirmação do sinal.',
+      totalAmount: 1680,
+      depositAmount: 500,
+      paidAmount: 250,
+    },
+    {
+      title: 'Aniversário da família Costa',
+      startOffset: 24,
+      endOffset: 27,
+      status: 'booked',
+      bookingStatus: 'inquiry',
+      notes: 'Reserva para confraternização de aniversário.',
+      totalAmount: 4200,
+      depositAmount: 1200,
+      paidAmount: 0,
+    },
+  ];
+
+  return seeds.map((seed, index) => {
+    const startDate = formatDate(addDays(baseDate, seed.startOffset));
+    const endDate = formatDate(addDays(baseDate, seed.endOffset));
+
+    return {
+      id: index + 1,
+      title: seed.title,
+      startDate,
+      endDate,
+      status: seed.status,
+      bookingStatus: seed.bookingStatus ?? 'inquiry',
+      notes: seed.notes ?? null,
+      totalAmount: seed.totalAmount ?? 0,
+      depositAmount: seed.depositAmount ?? 0,
+      paidAmount: seed.paidAmount ?? 0,
+    };
+  });
 };
 
 @Component({
@@ -187,12 +268,32 @@ export class App implements OnDestroy {
     const entries = this.entries();
 
     return Array.from({ length: daysInMonth }, (_, index) => {
-      const date = formatDate(new Date(month.getFullYear(), month.getMonth(), index + 1));
+      const currentDate = new Date(month.getFullYear(), month.getMonth(), index + 1);
+      const date = formatDate(currentDate);
+      const weekday = currentDate.getDay();
+      const entry = entries.find((item) => item.startDate <= date && item.endDate >= date);
+      const previousDate = index > 0 ? formatDate(addDays(currentDate, -1)) : null;
+      const nextDate = index < daysInMonth - 1 ? formatDate(addDays(currentDate, 1)) : null;
+      const previousEntry = previousDate
+        ? entries.find((item) => item.startDate <= previousDate && item.endDate >= previousDate)
+        : undefined;
+      const nextEntry = nextDate
+        ? entries.find((item) => item.startDate <= nextDate && item.endDate >= nextDate)
+        : undefined;
+      const entryStart = !!entry && (!previousEntry || previousEntry.id !== entry.id);
+      const entryEnd = !!entry && (!nextEntry || nextEntry.id !== entry.id);
+      const entrySingle = !!entry && entryStart && entryEnd;
+
       return {
         date,
         day: index + 1,
+        weekday,
         isToday: date === today,
-        entry: entries.find((entry) => entry.startDate <= date && entry.endDate >= date),
+        entry,
+        entryStart,
+        entryMiddle: !!entry && !entryStart && !entryEnd,
+        entryEnd,
+        entrySingle,
       };
     });
   });
@@ -642,13 +743,19 @@ export class App implements OnDestroy {
     this.loading.set(true);
     this.http.get<CalendarEntry[]>(`${this.apiUrl}/calendar-entries?from=${from}&to=${to}`).subscribe({
       next: (entries) => {
-        this.entries.set(entries);
+        this.entries.set(entries.length || environment.production ? entries : buildMockCalendarEntries(month));
         this.loading.set(false);
       },
       error: (error: HttpErrorResponse) => {
-        this.entries.set([]);
+        this.entries.set(environment.production ? [] : buildMockCalendarEntries(month));
         this.loading.set(false);
-        this.error.set(this.getErrorMessage(error));
+        if (environment.production) {
+          this.error.set(this.getErrorMessage(error));
+        } else if (error.status !== 0) {
+          this.error.set(this.getErrorMessage(error));
+        } else {
+          this.notice.set('Usando aluguéis mockados para visualização em ambiente dev.');
+        }
       },
     });
   }

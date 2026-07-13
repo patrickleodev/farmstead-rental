@@ -104,8 +104,10 @@
                 @for (entry of upcomingEntries(); track entry.id) {
                   <div class="entry-row">
                     <span [class]="entry.status"></span>
-                    <strong>{{ entry.title }}</strong>
-                    <small>{{ entry.startDate }} até {{ entry.endDate }}</small>
+                    <div class="entry-main">
+                      <strong>{{ entry.title }}</strong>
+                      <small>{{ entry.startDate }} até {{ entry.endDate }}</small>
+                    </div>
                     <em>{{ entry.status === 'booked' ? getBookingStatusLabel(entry.bookingStatus) : 'Bloqueado' }}</em>
                   </div>
                 }
@@ -256,12 +258,19 @@
                   [class.today]="day.isToday"
                   [class.booked-day]="day.entry?.status === 'booked'"
                   [class.blocked-day]="day.entry?.status === 'blocked'"
+                  [class.entry-start]="day.entryStart"
+                  [class.entry-middle]="day.entryMiddle"
+                  [class.entry-end]="day.entryEnd"
+                  [class.entry-single]="day.entrySingle"
+                  [class.entry-active]="selectedEntry()?.id === day.entry?.id"
                   [class.selected]="startDate === day.date"
                   (click)="selectDay(day)"
                 >
                   <span>{{ day.day }}</span>
                   @if (day.entry) {
-                    <small>{{ day.entry.title }}</small>
+                    @if (day.entryStart || day.entrySingle) {
+                      <small>{{ day.entry.title }}</small>
+                    }
                   } @else {
                     <small>Livre</small>
                   }
