@@ -4,7 +4,9 @@ import { Component, HostBinding, NgZone, OnDestroy, computed, inject, signal } f
 import { FormsModule } from '@angular/forms';
 import { Capacitor } from '@capacitor/core';
 import { SocialLogin } from '@capgo/capacitor-social-login';
-import { IonApp, IonContent } from '@ionic/angular/standalone';
+import { IonApp, IonContent, IonIcon } from '@ionic/angular/standalone';
+import { addIcons } from 'ionicons';
+import { calendarOutline, chatbubbleEllipsesOutline, chevronBackOutline, chevronForwardOutline, createOutline, gridOutline, trashOutline } from 'ionicons/icons';
 import { Socket, io } from 'socket.io-client';
 
 import { environment } from '../environments/environment';
@@ -38,7 +40,9 @@ type CalendarEntry = {
   id: number;
   title: string;
   startDate: string;
+  startTime: string | null;
   endDate: string;
+  endTime: string | null;
   status: CalendarEntryStatus;
   bookingStatus: BookingStatus;
   notes: string | null;
@@ -174,7 +178,9 @@ const buildMockCalendarEntries = (month: Date): CalendarEntry[] => {
       id: index + 1,
       title: seed.title,
       startDate,
+      startTime: null,
       endDate,
+      endTime: null,
       status: seed.status,
       bookingStatus: seed.bookingStatus ?? 'inquiry',
       notes: seed.notes ?? null,
@@ -187,7 +193,7 @@ const buildMockCalendarEntries = (month: Date): CalendarEntry[] => {
 
 @Component({
   selector: 'app-root',
-  imports: [CurrencyPipe, DatePipe, FormsModule, IonApp, IonContent],
+  imports: [CurrencyPipe, DatePipe, FormsModule, IonApp, IonContent, IonIcon],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
@@ -198,9 +204,11 @@ export class App implements OnDestroy {
   private readonly socket = this.createRealtimeSocket();
   private readonly accessTokenKey = 'farmstead-rental.access-token';
   private readonly devThemeStorageKey = 'farmstead-rental.dev-theme';
+  private readonly mockCalendarStorageKey = 'farmstead-rental.show-calendar-mocks';
   private workspaceStarted = false;
   private realtimeBound = false;
   private nativeGoogleInitialized = false;
+  private formSnapshot = '';
 
   protected readonly currentPath = signal(this.getCurrentPath());
   protected readonly isNativePlatform = Capacitor.isNativePlatform();
@@ -226,6 +234,7 @@ export class App implements OnDestroy {
   protected readonly auditLoading = signal(false);
   protected readonly showDevThemeControls = !environment.production;
   protected readonly devTheme = signal<DevTheme>(this.readDevTheme());
+  protected readonly showMockCalendarEntries = signal(this.readMockCalendarPreference());
   private readonly selectedDate = signal(formatDate(new Date()));
 
   @HostBinding('class.dev-theme-light')
@@ -248,6 +257,8 @@ export class App implements OnDestroy {
   }
 
   protected endDate = formatDate(new Date());
+  protected startTime = '';
+  protected endTime = '';
   protected status: CalendarEntryStatus = 'booked';
   protected bookingStatus: BookingStatus = 'inquiry';
   protected notes = '';
@@ -316,6 +327,15 @@ export class App implements OnDestroy {
   });
 
   constructor() {
+    addIcons({
+      'chevron-back-outline': chevronBackOutline,
+      'chevron-forward-outline': chevronForwardOutline,
+      'grid-outline': gridOutline,
+      'calendar-outline': calendarOutline,
+      'chatbubble-ellipses-outline': chatbubbleEllipsesOutline,
+      'create-outline': createOutline,
+      'trash-outline': trashOutline,
+    });
     window.addEventListener('popstate', () => this.zone.run(() => this.handleLocation()));
     this.handleLocation();
     this.restoreSession();
@@ -332,6 +352,14 @@ export class App implements OnDestroy {
   protected setDevTheme(theme: DevTheme) {
     this.devTheme.set(theme);
     localStorage.setItem(this.devThemeStorageKey, theme);
+  }
+
+  protected toggleMockCalendarEntries() {
+    const nextValue = !this.showMockCalendarEntries();
+    this.showMockCalendarEntries.set(nextValue);
+    localStorage.setItem(this.mockCalendarStorageKey, nextValue ? 'visible' : 'hidden');
+    this.notice.set(nextValue ? 'Mocking do calendario visivel.' : 'Mocking do calendario oculto.');
+    this.loadEntries();
   }
 
   protected openView(view: ManagementView) {
@@ -445,23 +473,34 @@ export class App implements OnDestroy {
   }
 
   protected editEntry(entry: CalendarEntry) {
+    this.fillFormFromEntry(entry);
+    this.error.set('');
+    this.notice.set('');
+  }
+
+  private fillFormFromEntry(entry: CalendarEntry) {
     this.editingEntryId.set(entry.id);
     this.title = entry.title;
     this.startDate = entry.startDate;
+    this.startTime = entry.startTime ?? '';
     this.endDate = entry.endDate;
+    this.endTime = entry.endTime ?? '';
     this.status = entry.status;
-    this.bookingStatus = entry.bookingStatus;
+    this.bookingStatus = entry.bookingStatus ?? 'inquiry';
     this.notes = entry.notes ?? '';
     this.totalAmount = Number(entry.totalAmount);
     this.depositAmount = Number(entry.depositAmount);
     this.paidAmount = Number(entry.paidAmount);
-    this.error.set('');
-    this.notice.set('');
+    this.formSnapshot = this.getFormSnapshot();
   }
 
   protected saveEntry() {
     this.error.set('');
     this.notice.set('');
+
+    if (this.editingEntryId() && !this.hasFormChanges()) {
+      return;
+    }
 
     if (!this.title.trim() || !this.startDate || !this.endDate) {
       this.error.set('Preencha o título e o período antes de salvar.');
@@ -472,7 +511,9 @@ export class App implements OnDestroy {
     const payload = {
       title: this.title,
       startDate: this.startDate,
+      startTime: this.startTime || null,
       endDate: this.endDate,
+      endTime: this.endTime || null,
       status: this.status,
       bookingStatus: this.bookingStatus,
       notes: this.notes,
@@ -723,17 +764,35 @@ export class App implements OnDestroy {
     return Math.max(0, Number(entry.totalAmount) - Number(entry.paidAmount));
   }
 
+  protected formatEntryPeriod(entry: CalendarEntry) {
+    const start = entry.startTime ? `${entry.startDate} ${entry.startTime.slice(0, 5)}` : entry.startDate;
+    const end = entry.endTime ? `${entry.endDate} ${entry.endTime.slice(0, 5)}` : entry.endDate;
+    return `${start} até ${end}`;
+  }
+
+  protected hasFormChanges() {
+    const entryId = this.editingEntryId();
+    if (!entryId) {
+      return true;
+    }
+    const originalEntry = this.entries().find((entry) => entry.id === entryId);
+    return !originalEntry || this.getFormSnapshot() !== this.getEntrySnapshot(originalEntry);
+  }
+
   private resetForm(date: string) {
     this.editingEntryId.set(null);
     this.title = '';
     this.startDate = date;
+    this.startTime = '';
     this.endDate = date;
+    this.endTime = '';
     this.status = 'booked';
     this.bookingStatus = 'inquiry';
     this.notes = '';
     this.totalAmount = 0;
     this.depositAmount = 0;
     this.paidAmount = 0;
+    this.formSnapshot = this.getFormSnapshot();
   }
 
   private loadEntries() {
@@ -743,21 +802,80 @@ export class App implements OnDestroy {
     this.loading.set(true);
     this.http.get<CalendarEntry[]>(`${this.apiUrl}/calendar-entries?from=${from}&to=${to}`).subscribe({
       next: (entries) => {
-        this.entries.set(entries.length || environment.production ? entries : buildMockCalendarEntries(month));
+        const resolvedEntries = this.resolveCalendarEntries(entries, month);
+        this.entries.set(resolvedEntries);
+        this.syncSelectedDateWithEntries(resolvedEntries);
         this.loading.set(false);
       },
       error: (error: HttpErrorResponse) => {
-        this.entries.set(environment.production ? [] : buildMockCalendarEntries(month));
+        const resolvedEntries = this.resolveCalendarEntries([], month);
+        this.entries.set(resolvedEntries);
+        this.syncSelectedDateWithEntries(resolvedEntries);
         this.loading.set(false);
         if (environment.production) {
           this.error.set(this.getErrorMessage(error));
         } else if (error.status !== 0) {
           this.error.set(this.getErrorMessage(error));
-        } else {
+        } else if (this.showMockCalendarEntries()) {
           this.notice.set('Usando aluguéis mockados para visualização em ambiente dev.');
         }
       },
     });
+  }
+
+  private resolveCalendarEntries(entries: CalendarEntry[], month: Date) {
+    if (entries.length || environment.production || !this.showMockCalendarEntries()) {
+      return entries;
+    }
+    return buildMockCalendarEntries(month);
+  }
+
+  private syncSelectedDateWithEntries(entries: CalendarEntry[]) {
+    const selectedDate = this.startDate;
+    const entry = entries.find((item) => item.startDate <= selectedDate && item.endDate >= selectedDate);
+    if (entry) {
+      this.fillFormFromEntry(entry);
+    } else {
+      this.resetForm(selectedDate);
+    }
+  }
+
+  private getFormSnapshot() {
+    const snapshot = {
+      title: this.title.trim(),
+      startDate: this.startDate,
+      startTime: this.startTime || null,
+      endDate: this.endDate,
+      endTime: this.endTime || null,
+      status: this.status,
+      notes: this.notes.trim(),
+    };
+    return JSON.stringify(this.status === 'booked' ? {
+      ...snapshot,
+      bookingStatus: this.bookingStatus ?? 'inquiry',
+      totalAmount: Number(this.totalAmount || 0),
+      depositAmount: Number(this.depositAmount || 0),
+      paidAmount: Number(this.paidAmount || 0),
+    } : snapshot);
+  }
+
+  private getEntrySnapshot(entry: CalendarEntry) {
+    const snapshot = {
+      title: entry.title.trim(),
+      startDate: entry.startDate,
+      startTime: entry.startTime ?? null,
+      endDate: entry.endDate,
+      endTime: entry.endTime ?? null,
+      status: entry.status,
+      notes: (entry.notes ?? '').trim(),
+    };
+    return JSON.stringify(entry.status === 'booked' ? {
+      ...snapshot,
+      bookingStatus: entry.bookingStatus ?? 'inquiry',
+      totalAmount: Number(entry.totalAmount || 0),
+      depositAmount: Number(entry.depositAmount || 0),
+      paidAmount: Number(entry.paidAmount || 0),
+    } : snapshot);
   }
 
   private loadChatMessages() {
@@ -853,6 +971,10 @@ export class App implements OnDestroy {
   private readDevTheme(): DevTheme {
     const theme = localStorage.getItem(this.devThemeStorageKey);
     return theme === 'light' || theme === 'dark' ? theme : 'system';
+  }
+
+  private readMockCalendarPreference() {
+    return localStorage.getItem(this.mockCalendarStorageKey) !== 'hidden';
   }
 
   private addChatMessage(message: ChatMessage) {

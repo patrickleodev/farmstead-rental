@@ -36,7 +36,7 @@
     <main class="shell">
       <aside class="sidebar" aria-label="Navegação principal">
         <div class="brand">
-          <span class="brand-mark" aria-hidden="true">FR</span>
+          <img class="brand-mark" src="favicon.ico" alt="" aria-hidden="true" style="background: transparent" />
           <div>
             <strong>Farmstead Rental</strong>
             <span>Gestão da chácara</span>
@@ -44,9 +44,9 @@
         </div>
 
         <nav>
-          <button type="button" [class.active]="activeView() === 'dashboard'" (click)="openView('dashboard')">Painel</button>
-          <button type="button" [class.active]="activeView() === 'calendar'" (click)="openView('calendar')">Calendário</button>
-          <button type="button" [class.active]="activeView() === 'chat'" (click)="openView('chat')">Chat</button>
+          <button type="button" [class.active]="activeView() === 'dashboard'" (click)="openView('dashboard')"><ion-icon name="grid-outline" aria-hidden="true"></ion-icon>Painel</button>
+          <button type="button" [class.active]="activeView() === 'calendar'" (click)="openView('calendar')"><ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>Calendário</button>
+          <button type="button" [class.active]="activeView() === 'chat'" (click)="openView('chat')"><ion-icon name="chatbubble-ellipses-outline" aria-hidden="true"></ion-icon>Chat</button>
         </nav>
 
         <div class="internal-note">
@@ -106,7 +106,7 @@
                     <span [class]="entry.status"></span>
                     <div class="entry-main">
                       <strong>{{ entry.title }}</strong>
-                      <small>{{ entry.startDate }} até {{ entry.endDate }}</small>
+                      <small>{{ formatEntryPeriod(entry) }}</small>
                     </div>
                     <em>{{ entry.status === 'booked' ? getBookingStatusLabel(entry.bookingStatus) : 'Bloqueado' }}</em>
                   </div>
@@ -203,25 +203,27 @@
           <button type="button" class="today-button" (click)="goToToday()">Hoje</button>
         </header>
 
-        <section class="metrics" aria-label="Resumo mensal">
-          <article class="metric booked">
+        <section class="calendar-layout">
+          <div class="calendar-stack">
+            <section class="metrics" aria-label="Resumo mensal">
+              <article class="metric booked">
             <span>Reservadas</span>
             <strong>{{ bookedDays() }}</strong>
             <small>dias ocupados neste mês</small>
-          </article>
-          <article class="metric free">
+              </article>
+              <article class="metric free">
             <span>Livres</span>
             <strong>{{ freeDays() }}</strong>
             <small>dias disponíveis para aluguel</small>
-          </article>
-          <article class="metric blocked">
+              </article>
+              <article class="metric blocked">
             <span>Bloqueadas</span>
             <strong>{{ blockedDays() }}</strong>
             <small>dias para manutenção ou uso próprio</small>
-          </article>
-        </section>
+              </article>
+            </section>
 
-        <section class="calendar-layout">
+
           <article class="panel calendar-panel">
             <div class="calendar-heading">
               <div>
@@ -229,8 +231,13 @@
                 <h2>{{ monthLabel() }}</h2>
               </div>
               <div class="month-actions">
-                <button type="button" class="icon-button" aria-label="Mês anterior" (click)="previousMonth()">‹</button>
-                <button type="button" class="icon-button" aria-label="Próximo mês" (click)="nextMonth()">›</button>
+                @if (showDevThemeControls) {
+                  <button type="button" class="mock-toggle" (click)="toggleMockCalendarEntries()">
+                    {{ showMockCalendarEntries() ? 'Ocultar mocking' : 'Mostrar mocking' }}
+                  </button>
+                }
+                <button type="button" class="icon-button" aria-label="Mes anterior" (click)="previousMonth()"><ion-icon name="chevron-back-outline" aria-hidden="true"></ion-icon></button>
+                <button type="button" class="icon-button" aria-label="Proximo mes" (click)="nextMonth()"><ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></button>
               </div>
             </div>
 
@@ -281,6 +288,8 @@
             </div>
           </article>
 
+          </div>
+
           <aside class="panel form-panel">
             <div>
               <p class="eyebrow">{{ editingEntryId() ? 'Editar aluguel' : 'Novo período' }}</p>
@@ -305,6 +314,17 @@
                 <label>
                   Saída
                   <input [(ngModel)]="endDate" name="endDate" type="date" required />
+                </label>
+              </div>
+
+              <div class="date-fields">
+                <label>
+                  Horário de entrada <em>(opcional)</em>
+                  <input [(ngModel)]="startTime" name="startTime" type="time" />
+                </label>
+                <label>
+                  Horário de saída <em>(opcional)</em>
+                  <input [(ngModel)]="endTime" name="endTime" type="time" />
                 </label>
               </div>
 
@@ -355,7 +375,15 @@
                 <textarea [(ngModel)]="notes" name="notes" rows="3" placeholder="Ex.: sinal pago, manutenção da piscina…"></textarea>
               </label>
 
-              <button type="submit" class="save-button" [disabled]="saving()">
+              <button
+                type="submit"
+                class="save-button"
+                [class.no-changes]="!!editingEntryId() && !hasFormChanges()"
+                [disabled]="saving()"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 3h12l2 2v16H5zM8 3v6h8V3M8 21v-8h8v8"/>
+                </svg>
                 {{ saving() ? 'Salvando…' : editingEntryId() ? 'Salvar alterações' : 'Salvar período' }}
               </button>
             </form>
@@ -370,14 +398,18 @@
                       @if (entry.status === 'booked') {
                         Saldo {{ getEntryBalance(entry) | currency: 'BRL' : 'symbol' : '1.2-2' }} · {{ getBookingStatusLabel(entry.bookingStatus) }}
                       } @else {
-                        {{ entry.startDate }} até {{ entry.endDate }}
+                        {{ formatEntryPeriod(entry) }}
                       }
                     </small>
                   </div>
                 </div>
                 <div class="entry-actions">
-                  <button type="button" class="edit-button" (click)="editEntry(entry)">Editar</button>
-                  <button type="button" class="delete-button" (click)="deleteEntry(entry)">Remover</button>
+                  <button type="button" class="edit-button" aria-label="Editar" title="Editar" (click)="editEntry(entry)">
+                    <ion-icon name="create-outline" aria-hidden="true"></ion-icon>
+                  </button>
+                  <button type="button" class="delete-button" aria-label="Remover" title="Remover" (click)="deleteEntry(entry)">
+                    <ion-icon name="trash-outline" aria-hidden="true"></ion-icon>
+                  </button>
                 </div>
               </section>
             }

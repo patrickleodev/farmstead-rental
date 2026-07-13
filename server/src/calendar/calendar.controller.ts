@@ -22,7 +22,9 @@ import { CalendarService } from './calendar.service';
 type CreateCalendarEntryBody = {
   title: string;
   startDate: string;
+  startTime?: string | null;
   endDate: string;
+  endTime?: string | null;
   status: CalendarEntryStatus;
   bookingStatus?: BookingStatus;
   notes?: string;

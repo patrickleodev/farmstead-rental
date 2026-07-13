@@ -19,7 +19,9 @@ import type { AuthenticatedUser } from '../auth/auth-user';
 export type CreateCalendarEntry = {
   title: string;
   startDate: string;
+  startTime?: string | null;
   endDate: string;
+  endTime?: string | null;
   status: CalendarEntryStatus;
   bookingStatus?: BookingStatus;
   notes?: string;
@@ -56,7 +58,7 @@ export class CalendarService {
 
   async create(payload: CreateCalendarEntry, actor: AuthenticatedUser) {
     const entry = this.normalizePayload(payload);
-    await this.ensureNoOverlap(entry.startDate, entry.endDate);
+    await this.ensureNoOverlap(entry);
     const savedEntry = await this.calendarEntries.save(
       this.calendarEntries.create(entry),
     );
@@ -96,7 +98,7 @@ export class CalendarService {
     }
 
     const entry = this.normalizePayload(payload);
-    await this.ensureNoOverlap(entry.startDate, entry.endDate, id);
+    await this.ensureNoOverlap(entry, id);
     const savedEntry = await this.calendarEntries.save({ ...existingEntry, ...entry });
     await this.auditService.record(actor, {
       action: 'calendar.updated',
@@ -112,6 +114,8 @@ export class CalendarService {
     const title = payload.title?.trim();
     const notes = payload.notes?.trim();
     const { startDate, endDate, status } = payload;
+    const startTime = this.normalizeTime(payload.startTime, 'horário de entrada');
+    const endTime = this.normalizeTime(payload.endTime, 'horário de saída');
     const bookingStatus = payload.bookingStatus ?? 'inquiry';
     const totalAmount = this.normalizeAmount(payload.totalAmount, 'valor total');
     const depositAmount = this.normalizeAmount(payload.depositAmount, 'sinal');
@@ -132,11 +136,14 @@ export class CalendarService {
       );
     }
     this.ensureDateRange(startDate, endDate);
+    this.ensureDateTimeRange(startDate, startTime, endDate, endTime);
 
     return {
       title,
       startDate,
+      startTime,
       endDate,
+      endTime,
       status,
       bookingStatus,
       notes: notes || undefined,
@@ -161,6 +168,33 @@ export class CalendarService {
     }
   }
 
+  private normalizeTime(value: string | null | undefined, field: string) {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    if (!/^\d{2}:\d{2}$/.test(value)) {
+      throw new BadRequestException(`Informe um ${field} vÃ¡lido.`);
+    }
+    const [hour, minute] = value.split(':').map(Number);
+    if (hour > 23 || minute > 59) {
+      throw new BadRequestException(`Informe um ${field} vÃ¡lido.`);
+    }
+    return value;
+  }
+
+  private ensureDateTimeRange(
+    startDate: string,
+    startTime: string | null,
+    endDate: string,
+    endTime: string | null,
+  ) {
+    if (
+      this.toRangeStart(startDate, startTime) >= this.toRangeEnd(endDate, endTime)
+    ) {
+      throw new BadRequestException('Informe um intervalo de datas e horários válido.');
+    }
+  }
+
   private isDateOnly(value: string) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
       return false;
@@ -173,25 +207,43 @@ export class CalendarService {
   }
 
   private async ensureNoOverlap(
-    startDate: string,
-    endDate: string,
+    entry: CreateCalendarEntry,
     excludedEntryId?: number,
   ) {
     const query = this.calendarEntries
       .createQueryBuilder('entry')
-      .where('entry.start_date <= :endDate', { endDate })
-      .andWhere('entry.end_date >= :startDate', { startDate });
+      .where('entry.start_date <= :endDate', { endDate: entry.endDate })
+      .andWhere('entry.end_date >= :startDate', { startDate: entry.startDate });
 
     if (excludedEntryId) {
       query.andWhere('entry.id != :excludedEntryId', { excludedEntryId });
     }
 
-    const overlap = await query.getOne();
+    const candidates = await query.getMany();
+    const start = this.toRangeStart(entry.startDate, entry.startTime ?? null);
+    const end = this.toRangeEnd(entry.endDate, entry.endTime ?? null);
+    const overlap = candidates.find((candidate) => {
+      const candidateStart = this.toRangeStart(candidate.startDate, candidate.startTime);
+      const candidateEnd = this.toRangeEnd(candidate.endDate, candidate.endTime);
+      return candidateStart < end && candidateEnd > start;
+    });
 
     if (overlap) {
       throw new BadRequestException(
         'Esse período já possui uma reserva ou bloqueio.',
       );
     }
+  }
+
+  private toRangeStart(date: string, time: string | null) {
+    return new Date(`${date}T${time ?? '00:00'}:00`).getTime();
+  }
+
+  private toRangeEnd(date: string, time: string | null) {
+    const end = new Date(`${date}T${time ?? '00:00'}:00`);
+    if (!time) {
+      end.setDate(end.getDate() + 1);
+    }
+    return end.getTime();
   }
 }
