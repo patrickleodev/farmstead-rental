@@ -1,6 +1,6 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Component, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Component, HostBinding, NgZone, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Capacitor } from '@capacitor/core';
 import { SocialLogin } from '@capgo/capacitor-social-login';
@@ -12,6 +12,7 @@ import { environment } from '../environments/environment';
 type CalendarEntryStatus = 'booked' | 'blocked';
 type BookingStatus = 'inquiry' | 'deposit_pending' | 'confirmed' | 'completed';
 type ManagementView = 'dashboard' | 'calendar' | 'chat';
+type DevTheme = 'system' | 'light' | 'dark';
 
 type AuthUser = {
   id: number;
@@ -115,6 +116,7 @@ export class App implements OnDestroy {
   private readonly apiUrl = environment.apiUrl;
   private readonly socket = this.createRealtimeSocket();
   private readonly accessTokenKey = 'farmstead-rental.access-token';
+  private readonly devThemeStorageKey = 'farmstead-rental.dev-theme';
   private workspaceStarted = false;
   private realtimeBound = false;
   private nativeGoogleInitialized = false;
@@ -141,7 +143,19 @@ export class App implements OnDestroy {
   protected readonly googleClientId = signal('');
   protected readonly auditLogs = signal<AuditLog[]>([]);
   protected readonly auditLoading = signal(false);
+  protected readonly showDevThemeControls = !environment.production;
+  protected readonly devTheme = signal<DevTheme>(this.readDevTheme());
   private readonly selectedDate = signal(formatDate(new Date()));
+
+  @HostBinding('class.dev-theme-light')
+  protected get isDevLightTheme() {
+    return this.showDevThemeControls && this.devTheme() === 'light';
+  }
+
+  @HostBinding('class.dev-theme-dark')
+  protected get isDevDarkTheme() {
+    return this.showDevThemeControls && this.devTheme() === 'dark';
+  }
 
   protected title = '';
   protected get startDate() {
@@ -212,6 +226,11 @@ export class App implements OnDestroy {
 
   protected previousMonth() {
     this.changeMonth(-1);
+  }
+
+  protected setDevTheme(theme: DevTheme) {
+    this.devTheme.set(theme);
+    localStorage.setItem(this.devThemeStorageKey, theme);
   }
 
   protected openView(view: ManagementView) {
@@ -722,6 +741,11 @@ export class App implements OnDestroy {
 
   private getAccessToken() {
     return localStorage.getItem(this.accessTokenKey) ?? '';
+  }
+
+  private readDevTheme(): DevTheme {
+    const theme = localStorage.getItem(this.devThemeStorageKey);
+    return theme === 'light' || theme === 'dark' ? theme : 'system';
   }
 
   private addChatMessage(message: ChatMessage) {

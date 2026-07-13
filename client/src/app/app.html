@@ -1,5 +1,12 @@
 <ion-app>
   <ion-content fullscreen="true">
+    @if (showDevThemeControls) {
+      <div class="dev-theme-controls" aria-label="Tema de desenvolvimento">
+        <button type="button" [class.active]="devTheme() === 'system'" (click)="setDevTheme('system')">Sistema</button>
+        <button type="button" [class.active]="devTheme() === 'light'" (click)="setDevTheme('light')">Claro</button>
+        <button type="button" [class.active]="devTheme() === 'dark'" (click)="setDevTheme('dark')">Escuro</button>
+      </div>
+    }
     @if (currentPath() === '/login') {
       <main class="login-shell">
         <section class="login-card" aria-labelledby="login-title">

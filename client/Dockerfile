@@ -6,7 +6,7 @@ COPY package*.json ./
 RUN npm ci --workspaces=false
 
 COPY . .
-RUN npm run build
+RUN npm run build -- --configuration development
 
 FROM nginx:stable-alpine
 
