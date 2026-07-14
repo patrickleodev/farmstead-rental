@@ -113,6 +113,11 @@ type GoogleCredentialResponse = {
   credential: string;
 };
 
+type GoogleTokenResponse = {
+  access_token?: string;
+  error?: string;
+};
+
 type GoogleIdentity = {
   accounts: {
     id: {
@@ -120,10 +125,16 @@ type GoogleIdentity = {
         client_id: string;
         callback: (response: GoogleCredentialResponse) => void;
       }) => void;
-      renderButton: (
-        parent: HTMLElement,
-        options: { theme: string; size: string; text: string; width: number },
-      ) => void;
+    };
+    oauth2: {
+      initTokenClient: (options: {
+        client_id: string;
+        scope: string;
+        callback: (response: GoogleTokenResponse) => void;
+        error_callback?: () => void;
+      }) => {
+        requestAccessToken: (options?: { prompt?: string }) => void;
+      };
     };
   };
 };
@@ -538,6 +549,37 @@ export class App implements OnDestroy {
     }
   }
 
+  protected signInWithWebGoogle() {
+    const clientId = this.googleClientId();
+    const google = (window as unknown as { google?: GoogleIdentity }).google;
+    if (!clientId) {
+      this.loadGoogleConfiguration();
+      return;
+    }
+    if (!google) {
+      this.loadGoogleScript();
+      return;
+    }
+
+    this.loginError.set('');
+    google.accounts.oauth2
+      .initTokenClient({
+        client_id: clientId,
+        scope: 'openid email profile',
+        callback: (response) =>
+          this.zone.run(() => {
+            if (response.access_token) {
+              this.signInWithGoogleAccessToken(response.access_token);
+            } else if (response.error) {
+              this.loginError.set('Não foi possível iniciar o login Google.');
+            }
+          }),
+        error_callback: () =>
+          this.zone.run(() => this.loginError.set('Não foi possível iniciar o login Google.')),
+      })
+      .requestAccessToken({ prompt: 'select_account' });
+  }
+
   protected selectDay(day: CalendarDay) {
     if (this.suppressNextCalendarClick) {
       this.suppressNextCalendarClick = false;
@@ -832,22 +874,14 @@ export class App implements OnDestroy {
 
   private renderGoogleButton() {
     const clientId = this.googleClientId();
-    const target = document.getElementById('google-sign-in');
     const google = (window as unknown as { google?: GoogleIdentity }).google;
-    if (!clientId || !target || !google) {
+    if (!clientId || !google) {
       return;
     }
 
-    target.replaceChildren();
     google.accounts.id.initialize({
       client_id: clientId,
       callback: (response) => this.zone.run(() => this.signInWithGoogle(response.credential)),
-    });
-    google.accounts.id.renderButton(target, {
-      theme: 'outline',
-      size: 'large',
-      text: 'signin_with',
-      width: 320,
     });
   }
 
@@ -855,6 +889,25 @@ export class App implements OnDestroy {
     this.loginError.set('');
     this.loginLoading.set(true);
     this.http.post<GoogleLoginResponse>(`${this.apiUrl}/auth/google`, { credential }).subscribe({
+      next: ({ token, user }) => {
+        localStorage.setItem(this.accessTokenKey, token);
+        this.authUser.set(user);
+        this.loginLoading.set(false);
+        this.authLoading.set(false);
+        this.navigate('/', true);
+        this.startWorkspace();
+      },
+      error: (error: HttpErrorResponse) => {
+        this.loginLoading.set(false);
+        this.loginError.set(this.getLoginErrorMessage(error));
+      },
+    });
+  }
+
+  private signInWithGoogleAccessToken(accessToken: string) {
+    this.loginError.set('');
+    this.loginLoading.set(true);
+    this.http.post<GoogleLoginResponse>(`${this.apiUrl}/auth/google`, { accessToken, access_token: accessToken }).subscribe({
       next: ({ token, user }) => {
         localStorage.setItem(this.accessTokenKey, token);
         this.authUser.set(user);

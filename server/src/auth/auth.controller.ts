@@ -5,7 +5,9 @@ import { AuthService } from './auth.service';
 import { CurrentUser } from './current-user.decorator';
 
 type GoogleLoginBody = {
-  credential: string;
+  credential?: string;
+  accessToken?: string;
+  access_token?: string;
 };
 
 @Controller('api/auth')
@@ -21,7 +23,11 @@ export class AuthController {
 
   @Post('google')
   signInWithGoogle(@Body() body: GoogleLoginBody) {
-    return this.authService.signInWithGoogle(body.credential);
+    const accessToken = body.accessToken ?? body.access_token;
+    if (accessToken) {
+      return this.authService.signInWithGoogleAccessToken(accessToken);
+    }
+    return this.authService.signInWithGoogle(body.credential ?? '');
   }
 
   @Get('me')

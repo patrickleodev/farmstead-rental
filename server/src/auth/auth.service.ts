@@ -14,6 +14,22 @@ type AccessTokenPayload = AuthenticatedUser & {
   exp: number;
 };
 
+type GoogleProfile = {
+  sub: string;
+  email: string;
+  emailVerified: boolean;
+  name?: string;
+  picture?: string;
+};
+
+type GoogleUserInfoResponse = {
+  sub?: string;
+  email?: string;
+  email_verified?: boolean;
+  name?: string;
+  picture?: string;
+};
+
 @Injectable()
 export class AuthService {
   private readonly googleClient = new OAuth2Client();
@@ -28,6 +44,10 @@ export class AuthService {
   }
 
   async signInWithGoogle(credential: string) {
+    if (!credential) {
+      throw new UnauthorizedException('Não foi possível validar sua conta Google.');
+    }
+
     const clientId = this.getGoogleClientId();
     if (!clientId) {
       throw new ServiceUnavailableException(
@@ -43,6 +63,58 @@ export class AuthService {
     const email = profile?.email?.toLowerCase();
 
     if (!profile?.sub || !email || !profile.email_verified) {
+      throw new UnauthorizedException('Não foi possível validar sua conta Google.');
+    }
+    this.ensureAdminEmail(email);
+
+    const name = profile.name?.trim() || email.split('@')[0];
+    const avatarUrl = profile.picture ?? null;
+    let user = await this.users.findOneBy({ googleId: profile.sub });
+
+    if (user) {
+      user.email = email;
+      user.name = name;
+      user.avatarUrl = avatarUrl;
+    } else {
+      user = this.users.create({
+        googleId: profile.sub,
+        email,
+        name,
+        avatarUrl,
+      });
+    }
+
+    const savedUser = await this.users.save(user);
+    const authenticatedUser = this.toAuthenticatedUser(savedUser);
+    return {
+      token: this.signAccessToken(authenticatedUser),
+      user: authenticatedUser,
+    };
+  }
+
+  async signInWithGoogleAccessToken(accessToken: string) {
+    const clientId = this.getGoogleClientId();
+    if (!clientId) {
+      throw new ServiceUnavailableException(
+        'GOOGLE_CLIENT_ID não está configurado no servidor.',
+      );
+    }
+
+    const tokenInfo = await this.googleClient.getTokenInfo(accessToken);
+    if (tokenInfo.aud !== clientId) {
+      throw new UnauthorizedException('Não foi possível validar sua conta Google.');
+    }
+
+    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      throw new UnauthorizedException('Não foi possível validar sua conta Google.');
+    }
+
+    const profile = (await response.json()) as GoogleUserInfoResponse;
+    const email = profile.email?.toLowerCase();
+    if (!profile.sub || !email || !profile.email_verified) {
       throw new UnauthorizedException('Não foi possível validar sua conta Google.');
     }
     this.ensureAdminEmail(email);
