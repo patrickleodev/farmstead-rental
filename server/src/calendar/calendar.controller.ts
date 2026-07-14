@@ -15,6 +15,7 @@ import type { AuthenticatedUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import {
   BookingStatus,
+  CalendarPayment,
   CalendarEntryStatus,
 } from './calendar-entry.entity';
 import { CalendarService } from './calendar.service';
@@ -31,6 +32,7 @@ type CreateCalendarEntryBody = {
   totalAmount?: number;
   depositAmount?: number;
   paidAmount?: number;
+  payments?: CalendarPayment[];
 };
 
 @Controller('api/calendar-entries')

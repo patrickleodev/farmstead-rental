@@ -9,6 +9,7 @@ import {
   CalendarEntry,
   CalendarEntryStatus,
   BookingStatus,
+  CalendarPayment,
   bookingStatuses,
   calendarEntryStatuses,
 } from './calendar-entry.entity';
@@ -28,6 +29,7 @@ export type CreateCalendarEntry = {
   totalAmount?: number;
   depositAmount?: number;
   paidAmount?: number;
+  payments?: CalendarPayment[];
 };
 
 @Injectable()
@@ -119,7 +121,8 @@ export class CalendarService {
     const bookingStatus = payload.bookingStatus ?? 'inquiry';
     const totalAmount = this.normalizeAmount(payload.totalAmount, 'valor total');
     const depositAmount = this.normalizeAmount(payload.depositAmount, 'sinal');
-    const paidAmount = this.normalizeAmount(payload.paidAmount, 'valor já pago');
+    const payments = this.normalizePayments(payload.payments, payload.paidAmount, startDate);
+    const paidAmount = this.sumPayments(payments);
 
     if (!title) {
       throw new BadRequestException('Informe um título para o período.');
@@ -150,6 +153,7 @@ export class CalendarService {
       totalAmount,
       depositAmount,
       paidAmount,
+      payments,
     };
   }
 
@@ -159,6 +163,42 @@ export class CalendarService {
       throw new BadRequestException(`Informe um ${field} válido.`);
     }
     return Math.round(amount * 100) / 100;
+  }
+
+  private normalizePayments(
+    payments: CalendarPayment[] | undefined,
+    legacyPaidAmount: number | undefined,
+    fallbackDate: string,
+  ) {
+    if (!payments?.length) {
+      const paidAmount = this.normalizeAmount(legacyPaidAmount, 'valor já pago');
+      return paidAmount > 0 ? [{ date: fallbackDate, amount: paidAmount, note: null }] : [];
+    }
+
+    return payments.map((payment, index) => {
+      const date = payment.date;
+      const amount = this.normalizeAmount(payment.amount, `valor da parcela ${index + 1}`);
+      const note = payment.note?.trim();
+
+      if (!this.isDateOnly(date)) {
+        throw new BadRequestException(`Informe uma data válida para a parcela ${index + 1}.`);
+      }
+      if (amount <= 0) {
+        throw new BadRequestException(`Informe um valor maior que zero para a parcela ${index + 1}.`);
+      }
+
+      return {
+        date,
+        amount,
+        note: note || null,
+      };
+    });
+  }
+
+  private sumPayments(payments: CalendarPayment[]) {
+    return Math.round(
+      payments.reduce((total, payment) => total + Number(payment.amount || 0), 0) * 100,
+    ) / 100;
   }
 
   private ensureDateRange(startDate: string, endDate: string) {

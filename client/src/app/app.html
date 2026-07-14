@@ -200,7 +200,6 @@
             <h1>Calendário de aluguéis</h1>
             <p class="subtitle">Controle as datas livres, reservadas e bloqueadas em um só lugar.</p>
           </div>
-          <button type="button" class="today-button" (click)="goToToday()">Hoje</button>
         </header>
 
         <section class="calendar-layout">
@@ -228,7 +227,10 @@
             <div class="calendar-heading">
               <div>
                 <p class="eyebrow">Disponibilidade</p>
-                <h2>{{ monthLabel() }}</h2>
+                <div class="month-title">
+                  <h2>{{ monthLabel() }}</h2>
+                  <button type="button" class="today-button" style="height:26px;min-height:0;padding:2px 10px;line-height:1;border-radius:7px;background:transparent" (click)="goToToday()">Hoje</button>
+                </div>
               </div>
               <div class="month-actions">
                 @if (showDevThemeControls) {
@@ -251,40 +253,45 @@
               <p class="loading">Atualizando agenda…</p>
             }
 
-            <div class="weekdays" aria-hidden="true">
-              <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
-            </div>
-            <div class="calendar-grid">
-              @for (_ of [].constructor(leadingBlankDays()); track $index) {
-                <span class="blank-day"></span>
-              }
-              @for (day of monthDays(); track day.date) {
-                <button
-                  type="button"
-                  class="day"
-                  [class.today]="day.isToday"
-                  [class.booked-day]="day.entry?.status === 'booked'"
-                  [class.blocked-day]="day.entry?.status === 'blocked'"
-                  [class.entry-start]="day.entryStart"
-                  [class.entry-middle]="day.entryMiddle"
-                  [class.entry-end]="day.entryEnd"
-                  [class.entry-single]="day.entrySingle"
-                  [class.entry-week-start]="!!day.entry && day.weekday === 0"
-                  [class.entry-week-end]="!!day.entry && day.weekday === 6"
-                  [class.entry-active]="!!day.entry && selectedEntry()?.id === day.entry.id"
-                  [class.selected]="startDate === day.date"
-                  (click)="selectDay(day)"
-                >
-                  <span>{{ day.day }}</span>
-                  @if (day.entry) {
-                    @if (day.entryStart || day.entrySingle) {
-                      <small>{{ day.entry.title }}</small>
+            <div class="calendar-months" #calendarMonths (wheel)="handleCalendarWheel($event)">
+              <div class="calendar-grid calendar-sequence">
+                @for (_ of [].constructor(visibleLeadingBlankDays()); track $index) {
+                  <span class="blank-day"></span>
+                }
+                @for (day of visibleDays(); track day.date) {
+                  <button
+                    type="button"
+                    class="day"
+                    [class.day-focused]="day.monthKey === activeMonthKey()"
+                    [class.today]="day.isToday"
+                    [class.booked-day]="day.entry?.status === 'booked'"
+                    [class.blocked-day]="day.entry?.status === 'blocked'"
+                    [class.entry-start]="day.entryStart"
+                    [class.entry-middle]="day.entryMiddle"
+                    [class.entry-end]="day.entryEnd"
+                    [class.entry-single]="day.entrySingle"
+                    [class.entry-week-start]="!!day.entry && day.weekday === 0"
+                    [class.entry-week-end]="!!day.entry && day.weekday === 6"
+                    [class.entry-active]="!!day.entry && selectedEntry()?.id === day.entry.id"
+                    [class.selected]="isDraftRangeEndpoint(day.date)"
+                    [class.draft-range]="isDraftRangeDay(day.date)"
+                    [attr.data-month]="day.monthKey"
+                    [attr.data-month-start]="day.day === 1 ? day.monthKey : null"
+                    (pointerdown)="startDraftRangeDrag(day, $event)"
+                    (pointerenter)="updateDraftRangeDrag(day)"
+                    (click)="selectDay(day)"
+                  >
+                    <span>{{ day.day }}</span>
+                    @if (day.entry) {
+                      @if (day.entryStart || day.entrySingle) {
+                        <small>{{ day.entry.title }}</small>
+                      }
+                    } @else {
+                      <small>Livre</small>
                     }
-                  } @else {
-                    <small>Livre</small>
-                  }
-                </button>
-              }
+                  </button>
+                }
+              </div>
             </div>
           </article>
 
@@ -294,7 +301,7 @@
             <div>
               <p class="eyebrow">{{ editingEntryId() ? 'Editar aluguel' : 'Novo período' }}</p>
               <h2>{{ editingEntryId() ? 'Dados da reserva' : 'Adicionar à agenda' }}</h2>
-              <p class="form-intro">{{ editingEntryId() ? 'Atualize a reserva, situação ou financeiro e salve as alterações.' : 'Clique em uma data no calendário para definir o início.' }}</p>
+              <p class="form-intro">{{ editingEntryId() ? 'Atualize a reserva, situação ou financeiro e salve as alterações.' : 'Clique no dia de entrada e depois no dia de saída.' }}</p>
               @if (editingEntryId()) {
                 <button type="button" class="text-button new-entry-button" (click)="startNewEntry()">Adicionar novo período</button>
               }
@@ -359,10 +366,39 @@
                       <input [(ngModel)]="depositAmount" name="depositAmount" type="number" min="0" step="0.01" inputmode="decimal" />
                     </label>
                   </div>
-                  <label>
-                    Valor já pago
-                    <input [(ngModel)]="paidAmount" name="paidAmount" type="number" min="0" step="0.01" inputmode="decimal" />
-                  </label>
+                  <div class="payment-list">
+                    <div class="payment-list-heading">
+                      <span>Pagamentos</span>
+                      <button type="button" class="text-button compact-button" (click)="addPayment()">Adicionar pagamento</button>
+                    </div>
+                    @if (payments.length) {
+                      @for (payment of payments; track $index) {
+                        <div class="payment-row">
+                          <label>
+                            Data
+                            <input [(ngModel)]="payment.date" name="paymentDate{{ $index }}" type="date" />
+                          </label>
+                          <label>
+                            Valor
+                            <input [(ngModel)]="payment.amount" name="paymentAmount{{ $index }}" type="number" min="0" step="0.01" inputmode="decimal" />
+                          </label>
+                          <label>
+                            Observação
+                            <input [(ngModel)]="payment.note" name="paymentNote{{ $index }}" placeholder="Ex.: pix, sinal..." maxlength="80" />
+                          </label>
+                          <button type="button" class="delete-button payment-remove" aria-label="Remover pagamento" title="Remover pagamento" (click)="removePayment($index)">
+                            <ion-icon name="trash-outline" aria-hidden="true"></ion-icon>
+                          </button>
+                        </div>
+                      }
+                    } @else {
+                      <p class="payment-empty">Nenhum pagamento registrado.</p>
+                    }
+                  </div>
+                  <div class="payment-summary">
+                    <span>Total pago</span>
+                    <strong>{{ paidTotalAmount | currency: 'BRL' : 'symbol' : '1.2-2' }}</strong>
+                  </div>
                   <div class="payment-summary">
                     <span>Saldo pendente</span>
                     <strong>{{ outstandingAmount | currency: 'BRL' : 'symbol' : '1.2-2' }}</strong>
@@ -379,7 +415,7 @@
                 type="submit"
                 class="save-button"
                 [class.no-changes]="!!editingEntryId() && !hasFormChanges()"
-                [disabled]="saving()"
+                [disabled]="saving() || !isEntryFormReady()"
               >
                 <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M5 3h12l2 2v16H5zM8 3v6h8V3M8 21v-8h8v8"/>

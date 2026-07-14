@@ -17,6 +17,12 @@ export const bookingStatuses = [
 export type CalendarEntryStatus = (typeof calendarEntryStatuses)[number];
 export type BookingStatus = (typeof bookingStatuses)[number];
 
+export type CalendarPayment = {
+  date: string;
+  amount: number;
+  note?: string | null;
+};
+
 const decimalTransformer = {
   to: (value: number) => value,
   from: (value: string) => Number(value),
@@ -80,6 +86,9 @@ export class CalendarEntry {
     transformer: decimalTransformer,
   })
   paidAmount: number;
+
+  @Column({ name: 'payments', type: 'jsonb', default: () => "'[]'::jsonb" })
+  payments: CalendarPayment[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
