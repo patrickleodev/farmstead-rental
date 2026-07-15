@@ -249,6 +249,9 @@ export class App implements OnDestroy {
   private monthScrollTimeout?: number;
   private calendarWheelUnlockTimeout?: number;
   private calendarWheelLocked = false;
+  private calendarScrollLoadTimeout?: number;
+  private calendarGestureReleaseTimeout?: number;
+  private calendarGestureStartMonthKey: string | null = null;
   private releaseCalendarScrollSyncTimeout?: number;
   private syncingCalendarScroll = false;
 
@@ -292,6 +295,11 @@ export class App implements OnDestroy {
   @HostBinding('class.dev-theme-dark')
   protected get isDevDarkTheme() {
     return this.showDevThemeControls && this.devTheme() === 'dark';
+  }
+
+  @HostBinding('class.native-platform')
+  protected get isNativeHost() {
+    return this.isNativePlatform;
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -407,6 +415,12 @@ export class App implements OnDestroy {
     if (this.calendarWheelUnlockTimeout) {
       window.clearTimeout(this.calendarWheelUnlockTimeout);
     }
+    if (this.calendarScrollLoadTimeout) {
+      window.clearTimeout(this.calendarScrollLoadTimeout);
+    }
+    if (this.calendarGestureReleaseTimeout) {
+      window.clearTimeout(this.calendarGestureReleaseTimeout);
+    }
     if (this.releaseCalendarScrollSyncTimeout) {
       window.clearTimeout(this.releaseCalendarScrollSyncTimeout);
     }
@@ -448,6 +462,71 @@ export class App implements OnDestroy {
     this.calendarWheelUnlockTimeout = window.setTimeout(() => {
       this.calendarWheelLocked = false;
     }, 650);
+  }
+
+  protected beginCalendarMonthGesture() {
+    if (!this.isNativePlatform) {
+      return;
+    }
+
+    this.calendarGestureStartMonthKey = this.activeMonthKey();
+    if (this.calendarGestureReleaseTimeout) {
+      window.clearTimeout(this.calendarGestureReleaseTimeout);
+    }
+  }
+
+  protected handleCalendarScroll() {
+    if (!this.isNativePlatform || this.syncingCalendarScroll) {
+      return;
+    }
+
+    const container = this.calendarMonths?.nativeElement;
+    if (!container) {
+      return;
+    }
+
+    const sections = Array.from(container.querySelectorAll<HTMLElement>('[data-month-section]'));
+    if (!sections.length) {
+      return;
+    }
+
+    const containerLeft = container.getBoundingClientRect().left;
+    const activeSection = sections.reduce((closest, section) => {
+      const closestDistance = Math.abs(closest.getBoundingClientRect().left - containerLeft);
+      const sectionDistance = Math.abs(section.getBoundingClientRect().left - containerLeft);
+      return sectionDistance < closestDistance ? section : closest;
+    }, sections[0]);
+    const monthKey = activeSection.dataset['monthSection'];
+    this.releaseCalendarGestureLock();
+    if (!monthKey || monthKey === this.activeMonthKey()) {
+      return;
+    }
+
+    const visibleMonths = this.visibleMonths();
+    const limitedMonth = this.getOneStepGestureMonth(monthKey, visibleMonths);
+    if (limitedMonth && limitedMonth.key !== monthKey) {
+      this.month.set(limitedMonth.month);
+      this.scrollToMonth(limitedMonth.month, 'smooth');
+      this.releaseCalendarGestureLock();
+      return;
+    }
+
+    const activeMonth = this.firstDayOfMonth(new Date(`${monthKey}-01T12:00:00`));
+    this.month.set(activeMonth);
+
+    const shouldRefreshWindow =
+      monthKey === visibleMonths[0]?.key || monthKey === visibleMonths[visibleMonths.length - 1]?.key;
+    if (!shouldRefreshWindow) {
+      return;
+    }
+
+    if (this.calendarScrollLoadTimeout) {
+      window.clearTimeout(this.calendarScrollLoadTimeout);
+    }
+    this.calendarScrollLoadTimeout = window.setTimeout(() => {
+      this.calendarWindowMonth.set(activeMonth);
+      this.loadEntries(true);
+    }, 220);
   }
 
   protected openView(view: ManagementView) {
@@ -552,7 +631,11 @@ export class App implements OnDestroy {
       await this.initializeNativeGoogleLogin(clientId);
       const login = await SocialLogin.login({
         provider: 'google',
-        options: {},
+        options: {
+          style: 'bottom',
+          filterByAuthorizedAccounts: false,
+          autoSelectEnabled: false,
+        },
       });
       const idToken = 'idToken' in login.result ? login.result.idToken : null;
 
@@ -562,12 +645,9 @@ export class App implements OnDestroy {
 
       this.zone.run(() => this.signInWithGoogle(idToken));
     } catch (error) {
-      const code = (error as { code?: string }).code;
       this.zone.run(() => {
         this.loginLoading.set(false);
-        if (code !== 'USER_CANCELLED') {
-          this.loginError.set('Não foi possível iniciar o login Google no Android.');
-        }
+        this.loginError.set(this.getNativeGoogleLoginErrorMessage(error));
       });
     }
   }
@@ -1418,6 +1498,35 @@ export class App implements OnDestroy {
     return this.visibleMonths().some((calendarMonth) => calendarMonth.key === monthKey);
   }
 
+  private getOneStepGestureMonth(monthKey: string, visibleMonths: CalendarMonth[]) {
+    const anchorKey = this.calendarGestureStartMonthKey;
+    if (!anchorKey) {
+      return null;
+    }
+
+    const anchorIndex = visibleMonths.findIndex((calendarMonth) => calendarMonth.key === anchorKey);
+    const targetIndex = visibleMonths.findIndex((calendarMonth) => calendarMonth.key === monthKey);
+    if (anchorIndex < 0 || targetIndex < 0) {
+      return null;
+    }
+
+    const distance = targetIndex - anchorIndex;
+    if (Math.abs(distance) <= 1) {
+      return null;
+    }
+
+    return visibleMonths[anchorIndex + Math.sign(distance)] ?? null;
+  }
+
+  private releaseCalendarGestureLock() {
+    if (this.calendarGestureReleaseTimeout) {
+      window.clearTimeout(this.calendarGestureReleaseTimeout);
+    }
+    this.calendarGestureReleaseTimeout = window.setTimeout(() => {
+      this.calendarGestureStartMonthKey = null;
+    }, 700);
+  }
+
   private getMonthKey(month: Date) {
     return formatDate(month).slice(0, 7);
   }
@@ -1435,7 +1544,10 @@ export class App implements OnDestroy {
         return;
       }
 
-      const target = container.querySelector<HTMLElement>(`[data-month-start="${this.getMonthKey(month)}"]`);
+      const monthKey = this.getMonthKey(month);
+      const target = this.isNativePlatform
+        ? container.querySelector<HTMLElement>(`[data-month-section="${monthKey}"]`)
+        : container.querySelector<HTMLElement>(`[data-month-start="${monthKey}"]`);
       if (!target) {
         return;
       }
@@ -1445,8 +1557,13 @@ export class App implements OnDestroy {
         window.clearTimeout(this.releaseCalendarScrollSyncTimeout);
       }
 
-      const top = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
-      container.scrollTo({ top, behavior });
+      if (this.isNativePlatform) {
+        const left = target.getBoundingClientRect().left - container.getBoundingClientRect().left + container.scrollLeft;
+        container.scrollTo({ left, behavior });
+      } else {
+        const top = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+        container.scrollTo({ top, behavior });
+      }
       this.releaseCalendarScrollSyncTimeout = window.setTimeout(
         () => {
           this.syncingCalendarScroll = false;
@@ -1508,5 +1625,16 @@ export class App implements OnDestroy {
       return apiMessage;
     }
     return 'Não foi possível concluir o login com Google.';
+  }
+
+  private getNativeGoogleLoginErrorMessage(error: unknown) {
+    const { code, message } = error as { code?: string; message?: string };
+    if (code === 'USER_CANCELLED') {
+      return 'O login Google foi interrompido. Se isso aconteceu depois de escolher uma conta, confira a credencial Android no Google Cloud: pacote br.com.farmsteadrental.app e SHA-1 94:20:9A:19:4E:1C:97:3E:4C:ED:54:50:44:4B:6C:51:0A:C8:8A:4C.';
+    }
+    if (message) {
+      return `Não foi possível iniciar o login Google no Android: ${message}`;
+    }
+    return 'Não foi possível iniciar o login Google no Android.';
   }
 }

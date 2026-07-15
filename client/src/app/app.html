@@ -10,7 +10,11 @@
     @if (currentPath() === '/login') {
       <main class="login-shell">
         <section class="login-card" aria-labelledby="login-title">
-          <span class="brand-mark" aria-hidden="true">FR</span>
+          @if (isNativePlatform) {
+            <img class="brand-mark brand-mark-image" src="/brand-icon.png" alt="" aria-hidden="true" />
+          } @else {
+            <span class="brand-mark" aria-hidden="true">FR</span>
+          }
           <p class="eyebrow">Area administrativa</p>
           <h1 id="login-title">Entre para gerenciar a chacara</h1>
           <p class="subtitle">Use sua conta Google autorizada para acessar reservas, financeiro e o chat da equipe.</p>
@@ -44,7 +48,11 @@
     <main class="shell">
       <aside class="sidebar" aria-label="Navegação principal">
         <div class="brand">
-          <img class="brand-mark" src="favicon.ico" alt="" aria-hidden="true" style="background: transparent" />
+          @if (isNativePlatform) {
+            <img class="brand-mark brand-mark-image" src="/brand-icon.png" alt="" aria-hidden="true" />
+          } @else {
+            <img class="brand-mark brand-mark-image" src="favicon.ico" alt="" aria-hidden="true" style="background: transparent" />
+          }
           <div>
             <strong>Farmstead Rental</strong>
             <span>Gestão da chácara</span>
@@ -227,13 +235,22 @@
                 <p class="eyebrow">Disponibilidade</p>
                 <div class="month-title">
                   <h2>{{ monthLabel() }}</h2>
-                  <button type="button" class="today-button" style="height:26px;min-height:0;padding:2px 10px;line-height:1;border-radius:7px;background:transparent" (click)="goToToday()">Hoje</button>
+                  @if (!isNativePlatform) {
+                    <button type="button" class="today-button" style="height:26px;min-height:0;padding:2px 10px;line-height:1;border-radius:7px;background:transparent" (click)="goToToday()">Hoje</button>
+                  }
                 </div>
               </div>
               <div class="month-actions">
+                @if (isNativePlatform) {
+                  <button type="button" class="today-button calendar-today-button" (click)="goToToday()">Hoje</button>
+                }
                 @if (showDevThemeControls) {
                   <button type="button" class="mock-toggle" (click)="toggleMockCalendarEntries()">
-                    {{ showMockCalendarEntries() ? 'Ocultar mocking' : 'Mostrar mocking' }}
+                    @if (isNativePlatform) {
+                      {{ showMockCalendarEntries() ? 'Mocks on' : 'Mocks off' }}
+                    } @else {
+                      {{ showMockCalendarEntries() ? 'Ocultar mocking' : 'Mostrar mocking' }}
+                    }
                   </button>
                 }
                 <button type="button" class="icon-button" aria-label="Mes anterior" (click)="previousMonth()"><ion-icon name="chevron-back-outline" aria-hidden="true"></ion-icon></button>
@@ -251,47 +268,101 @@
               <p class="loading">Atualizando agenda…</p>
             }
 
-            <div class="calendar-months" #calendarMonths (wheel)="handleCalendarWheel($event)">
-              <div class="calendar-grid calendar-sequence">
-                @for (_ of [].constructor(visibleLeadingBlankDays()); track $index) {
-                  <span class="blank-day"></span>
-                }
-                @for (day of visibleDays(); track day.date) {
-                  <button
-                    type="button"
-                    class="day"
-                    [class.day-focused]="day.monthKey === activeMonthKey()"
-                    [class.today]="day.isToday"
-                    [class.booked-day]="day.entry?.status === 'booked'"
-                    [class.blocked-day]="day.entry?.status === 'blocked'"
-                    [class.entry-start]="day.entryStart"
-                    [class.entry-middle]="day.entryMiddle"
-                    [class.entry-end]="day.entryEnd"
-                    [class.entry-single]="day.entrySingle"
-                    [class.entry-week-start]="!!day.entry && day.weekday === 0"
-                    [class.entry-week-end]="!!day.entry && day.weekday === 6"
-                    [class.entry-active]="!!day.entry && selectedEntry()?.id === day.entry.id"
-                    [class.selected]="isDraftRangeEndpoint(day.date)"
-                    [class.draft-range]="isDraftRangeDay(day.date)"
-                    [attr.data-date]="day.date"
-                    [attr.data-month]="day.monthKey"
-                    [attr.data-month-start]="day.day === 1 ? day.monthKey : null"
-                    (pointerdown)="startDraftRangeDrag(day, $event)"
-                    (pointerenter)="updateDraftRangeDrag(day)"
-                    (click)="selectDay(day, $event)"
-                  >
-                    <span>{{ day.day }}</span>
-                    @if (day.entry) {
-                      @if (day.entryStart || day.entrySingle) {
-                        <small>{{ day.entry.title }}</small>
+            @if (isNativePlatform) {
+              <div
+                class="calendar-months calendar-month-list"
+                #calendarMonths
+                (pointerdown)="beginCalendarMonthGesture()"
+                (touchstart)="beginCalendarMonthGesture()"
+                (scroll)="handleCalendarScroll()"
+              >
+                @for (calendarMonth of visibleMonths(); track calendarMonth.key) {
+                  <section class="calendar-month-section" [attr.data-month-section]="calendarMonth.key" [attr.aria-label]="calendarMonth.label">
+                    <div class="calendar-grid calendar-sequence">
+                      @for (_ of [].constructor(calendarMonth.leadingBlankDays); track $index) {
+                        <span class="blank-day"></span>
                       }
-                    } @else {
-                      <small>Livre</small>
-                    }
-                  </button>
+                      @for (day of calendarMonth.days; track day.date) {
+                        <button
+                          type="button"
+                          class="day"
+                          [class.day-focused]="day.monthKey === activeMonthKey()"
+                          [class.today]="day.isToday"
+                          [class.booked-day]="day.entry?.status === 'booked'"
+                          [class.blocked-day]="day.entry?.status === 'blocked'"
+                          [class.entry-start]="day.entryStart"
+                          [class.entry-middle]="day.entryMiddle"
+                          [class.entry-end]="day.entryEnd"
+                          [class.entry-single]="day.entrySingle"
+                          [class.entry-week-start]="!!day.entry && day.weekday === 0"
+                          [class.entry-week-end]="!!day.entry && day.weekday === 6"
+                          [class.entry-active]="!!day.entry && selectedEntry()?.id === day.entry.id"
+                          [class.selected]="isDraftRangeEndpoint(day.date)"
+                          [class.draft-range]="isDraftRangeDay(day.date)"
+                          [attr.data-date]="day.date"
+                          [attr.data-month]="day.monthKey"
+                          [attr.data-month-start]="day.day === 1 ? day.monthKey : null"
+                          (pointerdown)="startDraftRangeDrag(day, $event)"
+                          (pointerenter)="updateDraftRangeDrag(day)"
+                          (click)="selectDay(day, $event)"
+                        >
+                          <span>{{ day.day }}</span>
+                          @if (day.entry) {
+                            @if (day.entryStart || day.entrySingle) {
+                              <small>{{ day.entry.title }}</small>
+                            }
+                          } @else {
+                            <small>Livre</small>
+                          }
+                        </button>
+                      }
+                    </div>
+                  </section>
                 }
               </div>
-            </div>
+            } @else {
+              <div class="calendar-months" #calendarMonths (wheel)="handleCalendarWheel($event)">
+                <div class="calendar-grid calendar-sequence">
+                  @for (_ of [].constructor(visibleLeadingBlankDays()); track $index) {
+                    <span class="blank-day"></span>
+                  }
+                  @for (day of visibleDays(); track day.date) {
+                    <button
+                      type="button"
+                      class="day"
+                      [class.day-focused]="day.monthKey === activeMonthKey()"
+                      [class.today]="day.isToday"
+                      [class.booked-day]="day.entry?.status === 'booked'"
+                      [class.blocked-day]="day.entry?.status === 'blocked'"
+                      [class.entry-start]="day.entryStart"
+                      [class.entry-middle]="day.entryMiddle"
+                      [class.entry-end]="day.entryEnd"
+                      [class.entry-single]="day.entrySingle"
+                      [class.entry-week-start]="!!day.entry && day.weekday === 0"
+                      [class.entry-week-end]="!!day.entry && day.weekday === 6"
+                      [class.entry-active]="!!day.entry && selectedEntry()?.id === day.entry.id"
+                      [class.selected]="isDraftRangeEndpoint(day.date)"
+                      [class.draft-range]="isDraftRangeDay(day.date)"
+                      [attr.data-date]="day.date"
+                      [attr.data-month]="day.monthKey"
+                      [attr.data-month-start]="day.day === 1 ? day.monthKey : null"
+                      (pointerdown)="startDraftRangeDrag(day, $event)"
+                      (pointerenter)="updateDraftRangeDrag(day)"
+                      (click)="selectDay(day, $event)"
+                    >
+                      <span>{{ day.day }}</span>
+                      @if (day.entry) {
+                        @if (day.entryStart || day.entrySingle) {
+                          <small>{{ day.entry.title }}</small>
+                        }
+                      } @else {
+                        <small>Livre</small>
+                      }
+                    </button>
+                  }
+                </div>
+              </div>
+            }
           </article>
 
           </div>
