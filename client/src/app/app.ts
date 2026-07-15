@@ -6,7 +6,7 @@ import { Capacitor } from '@capacitor/core';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import { IonApp, IonContent, IonIcon } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { calendarOutline, chatbubbleEllipsesOutline, chevronBackOutline, chevronForwardOutline, createOutline, gridOutline, trashOutline } from 'ionicons/icons';
+import { calendarOutline, chatbubbleEllipsesOutline, chevronBackOutline, chevronForwardOutline, createOutline, gridOutline, logOutOutline, sendOutline, trashOutline } from 'ionicons/icons';
 import { Socket, io } from 'socket.io-client';
 
 import { environment } from '../environments/environment';
@@ -272,6 +272,7 @@ export class App implements OnDestroy {
   protected readonly chatSending = signal(false);
   protected readonly chatError = signal('');
   protected readonly authUser = signal<AuthUser | null>(null);
+  protected readonly failedAvatarUrls = signal<ReadonlySet<string>>(new Set());
   protected readonly authLoading = signal(true);
   protected readonly loginLoading = signal(false);
   protected readonly loginError = signal('');
@@ -310,12 +311,9 @@ export class App implements OnDestroy {
     }
 
     event.preventDefault();
-    if (event.shiftKey) {
-      this.moveDraftStart(offset);
-    } else {
-      this.moveDraftEnd(offset);
-    }
-    this.rangeAnchorDate.set(this.startDate);
+    const targetDate = event.shiftKey ? this.extendDraftRange(offset) : this.moveDraftSelection(offset);
+    this.focusCalendarMonthForDate(targetDate, 'smooth');
+    this.focusCalendarDay(targetDate);
   }
 
   @HostListener('window:pointerup')
@@ -393,6 +391,8 @@ export class App implements OnDestroy {
       'calendar-outline': calendarOutline,
       'chatbubble-ellipses-outline': chatbubbleEllipsesOutline,
       'create-outline': createOutline,
+      'log-out-outline': logOutOutline,
+      'send-outline': sendOutline,
       'trash-outline': trashOutline,
     });
     window.addEventListener('popstate', () => this.zone.run(() => this.handleLocation()));
@@ -485,6 +485,17 @@ export class App implements OnDestroy {
       });
   }
 
+  protected handleChatDraftKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Enter' || event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    if (!this.chatSending() && this.chatDraft.trim()) {
+      this.sendChatMessage();
+    }
+  }
+
   protected nextMonth() {
     this.changeMonth(1);
   }
@@ -504,10 +515,22 @@ export class App implements OnDestroy {
     this.socket.disconnect();
     this.workspaceStarted = false;
     this.authUser.set(null);
+    this.failedAvatarUrls.set(new Set());
     this.entries.set([]);
     this.chatMessages.set([]);
     this.auditLogs.set([]);
     this.navigate('/login', true);
+  }
+
+  protected hasUserAvatar(user: AuthUser) {
+    return !!user.avatarUrl && !this.failedAvatarUrls().has(user.avatarUrl);
+  }
+
+  protected handleAvatarError(user: AuthUser) {
+    if (!user.avatarUrl) {
+      return;
+    }
+    this.failedAvatarUrls.update((failedUrls) => new Set(failedUrls).add(user.avatarUrl!));
   }
 
   protected retryGoogleLogin() {
@@ -580,7 +603,7 @@ export class App implements OnDestroy {
       .requestAccessToken({ prompt: 'select_account' });
   }
 
-  protected selectDay(day: CalendarDay) {
+  protected selectDay(day: CalendarDay, event: MouseEvent) {
     if (this.suppressNextCalendarClick) {
       this.suppressNextCalendarClick = false;
       return;
@@ -589,14 +612,14 @@ export class App implements OnDestroy {
       this.rangeAnchorDate.set(null);
       this.editEntry(day.entry);
     } else {
-      this.resetForm(day.date, false);
-      const anchorDate = this.rangeAnchorDate();
-      if (!anchorDate) {
-        this.rangeAnchorDate.set(day.date);
+      if (event.shiftKey) {
+        const anchorDate = this.rangeAnchorDate() ?? this.startDate;
+        this.resetForm(anchorDate, false);
+        this.applyDraftRange(anchorDate, day.date);
+        this.rangeAnchorDate.set(anchorDate);
       } else {
-        this.startDate = anchorDate <= day.date ? anchorDate : day.date;
-        this.endDate = anchorDate <= day.date ? day.date : anchorDate;
-        this.rangeAnchorDate.set(null);
+        this.resetForm(day.date, false);
+        this.rangeAnchorDate.set(day.date);
       }
     }
     this.notice.set('');
@@ -604,7 +627,7 @@ export class App implements OnDestroy {
   }
 
   protected startDraftRangeDrag(day: CalendarDay, event: PointerEvent) {
-    if (day.entry || this.editingEntryId() || event.button !== 0) {
+    if (day.entry || this.editingEntryId() || event.button !== 0 || !event.shiftKey) {
       return;
     }
     event.preventDefault();
@@ -1018,22 +1041,51 @@ export class App implements OnDestroy {
     this.endDate = startDate <= endDate ? endDate : startDate;
   }
 
-  private moveDraftStart(offset: number) {
-    const nextStartDate = this.shiftDate(this.startDate, offset);
-    if (nextStartDate <= this.endDate) {
-      this.startDate = nextStartDate;
-    }
+  private moveDraftSelection(offset: number) {
+    const targetDate = this.shiftDate(this.startDate, offset);
+
+    this.resetForm(targetDate, false);
+    this.rangeAnchorDate.set(targetDate);
+
+    return targetDate;
   }
 
-  private moveDraftEnd(offset: number) {
-    const nextEndDate = this.shiftDate(this.endDate, offset);
-    if (nextEndDate >= this.startDate) {
-      this.endDate = nextEndDate;
-    }
+  private extendDraftRange(offset: number) {
+    const anchorDate = this.rangeAnchorDate() ?? this.startDate;
+    const edgeDate = anchorDate === this.startDate ? this.endDate : this.startDate;
+    const nextEdgeDate = this.shiftDate(edgeDate, offset);
+
+    this.applyDraftRange(anchorDate, nextEdgeDate);
+    this.rangeAnchorDate.set(anchorDate);
+
+    return nextEdgeDate;
   }
 
   private shiftDate(date: string, offset: number) {
     return formatDate(addDays(new Date(`${date}T12:00:00`), offset));
+  }
+
+  private focusCalendarMonthForDate(date: string, behavior: ScrollBehavior) {
+    const targetMonth = this.firstDayOfMonth(new Date(`${date}T12:00:00`));
+    if (this.getMonthKey(targetMonth) === this.getMonthKey(this.month())) {
+      return;
+    }
+
+    this.month.set(targetMonth);
+    if (!this.isMonthInCalendarWindow(targetMonth)) {
+      this.calendarWindowMonth.set(targetMonth);
+      this.loadEntries(true);
+      return;
+    }
+
+    this.scrollToMonth(targetMonth, behavior);
+  }
+
+  private focusCalendarDay(date: string) {
+    window.setTimeout(() => {
+      const target = this.calendarMonths?.nativeElement.querySelector<HTMLButtonElement>(`button.day[data-date="${date}"]`);
+      target?.focus({ preventScroll: true });
+    });
   }
 
   private isTypingTarget(target: EventTarget | null) {

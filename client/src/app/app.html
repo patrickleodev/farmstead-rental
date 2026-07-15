@@ -61,6 +61,22 @@
           <span aria-hidden="true">◉</span>
           <p><strong>Área interna</strong>Somente a equipe gestora visualiza esta agenda.</p>
         </div>
+        @if (authUser(); as user) {
+          <div class="sidebar-user-card">
+            @if (hasUserAvatar(user)) {
+              <img [src]="user.avatarUrl" [alt]="user.name" referrerpolicy="no-referrer" (error)="handleAvatarError(user)" />
+            } @else {
+              <span class="user-avatar" aria-hidden="true">{{ user.name.charAt(0) }}</span>
+            }
+            <span>
+              <strong>{{ user.name }}</strong>
+              <small>Conta Google</small>
+            </span>
+            <button type="button" class="sidebar-logout-button" aria-label="Sair" title="Sair" (click)="logout()">
+              <ion-icon name="log-out-outline" aria-hidden="true"></ion-icon>
+            </button>
+          </div>
+        }
       </aside>
 
       <section class="workspace" id="calendario">
@@ -129,45 +145,18 @@
             }
           </section>
         } @else if (activeView() === 'chat') {
-          <section class="panel audit-panel">
-            <div class="calendar-heading">
-              <div>
-                <p class="eyebrow">Historico</p>
-                <h2>Ultimas alteracoes</h2>
-              </div>
-            </div>
-            @if (auditLoading()) {
-              <p class="loading">Carregando historico...</p>
-            } @else if (auditLogs().length) {
-              <div class="audit-list">
-                @for (log of auditLogs(); track log.id) {
-                  <article>
-                    <span aria-hidden="true">*</span>
-                    <div>
-                      <strong>{{ log.actorName }}</strong>
-                      <p>{{ log.summary }}</p>
-                    </div>
-                    <time>{{ log.createdAt | date: 'dd/MM HH:mm' }}</time>
-                  </article>
-                }
-              </div>
-            } @else {
-              <p class="loading">As alteracoes feitas pela equipe aparecerao aqui.</p>
-            }
-          </section>
-          <header class="topbar">
+          <section class="chat-shell" aria-label="Chat dos administradores">
+          <header class="chat-room-header">
             <div>
               <p class="eyebrow">Equipe interna</p>
               <h1>Chat dos administradores</h1>
               <p class="subtitle">Conversem sobre reservas, pagamentos e a operação da chácara.</p>
             </div>
+            <p class="chat-presence" [class.online]="realtimeConnected()">
+              <span aria-hidden="true"></span>
+              {{ realtimeConnected() ? 'Online' : 'Conectando' }}
+            </p>
           </header>
-
-          <section class="panel chat-panel" aria-label="Chat dos administradores">
-            <label class="chat-author-field">
-              Você está conversando como
-              <input [value]="authUser()?.name ?? ''" name="chatAuthor" readonly />
-            </label>
 
             <div class="chat-messages" aria-live="polite">
               @if (chatLoading()) {
@@ -191,9 +180,10 @@
             </div>
 
             <form class="chat-compose" (ngSubmit)="sendChatMessage()">
-              <textarea [(ngModel)]="chatDraft" name="chatDraft" rows="3" maxlength="1000" placeholder="Escreva uma mensagem para a equipe…"></textarea>
-              <button type="submit" class="save-button" [disabled]="chatSending()">
-                {{ chatSending() ? 'Enviando…' : 'Enviar mensagem' }}
+              <textarea [(ngModel)]="chatDraft" name="chatDraft" rows="1" maxlength="1000" placeholder="Mensagem" (keydown)="handleChatDraftKeydown($event)"></textarea>
+              <button type="submit" class="chat-send-button" [disabled]="chatSending() || !chatDraft.trim()" aria-label="Enviar mensagem">
+                <ion-icon name="send-outline" aria-hidden="true"></ion-icon>
+                <span>{{ chatSending() ? 'Enviando' : 'Enviar' }}</span>
               </button>
             </form>
 
@@ -283,11 +273,12 @@
                     [class.entry-active]="!!day.entry && selectedEntry()?.id === day.entry.id"
                     [class.selected]="isDraftRangeEndpoint(day.date)"
                     [class.draft-range]="isDraftRangeDay(day.date)"
+                    [attr.data-date]="day.date"
                     [attr.data-month]="day.monthKey"
                     [attr.data-month-start]="day.day === 1 ? day.monthKey : null"
                     (pointerdown)="startDraftRangeDrag(day, $event)"
                     (pointerenter)="updateDraftRangeDrag(day)"
-                    (click)="selectDay(day)"
+                    (click)="selectDay(day, $event)"
                   >
                     <span>{{ day.day }}</span>
                     @if (day.entry) {
